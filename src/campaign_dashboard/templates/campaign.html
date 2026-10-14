@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ c.slug }} — Campaigns{% endblock %}
+{% block crumbs %}{% set p = project_of[c.slug] %}<span class="sep">/</span><a href="../p/{{ p.key }}.html">{{ p.label }}</a><span class="sep">/</span><span>{{ c.slug }}</span>{% endblock %}
+{% block main %}
+<h1>{{ c.slug }}{% if c.prefix %} <span class="muted">{{ c.prefix }}</span>{% endif %}</h1>
+<p class="meta">
+  {% if c.repo %}<code>{{ c.repo }}</code>{% endif %}
+  {% if c.commit %} · {{ 'planned at' if c.stage == 'planned' else 'at' }} <code>{{ c.commit }}</code>{% endif %}
+  {% if c.branch %} · branch <code>{{ c.branch }}</code>{% endif %}
+</p>
+<p>{{ m.git_chip(c.git) }}</p>
+{% if c.errors %}<ul class="error">{% for e in c.errors %}<li>⚠ {{ e }}</li>{% endfor %}</ul>{% endif %}
+
+{% if c.design %}
+<section>
+  <h2>Design {{ m.stage_badge(c) if c.stage == 'brainstorm' }}</h2>
+  <dl class="design">{{ m.design_rows(c.design) }}</dl>
+  <ul class="checklist">{% for item, ok in c.design.settled.items() %}<li class="{{ 'done' if ok else 'todo' }}">{{ '☑' if ok else '☐' }} {{ item }}</li>{% endfor %}</ul>
+  <p><a href="DESIGN.html">DESIGN.md</a></p>
+</section>
+{% endif %}
+
+{% if c.stage in ('brainstorm', 'audited') %}
+<section>
+  <h2>Not planned yet {% if c.stage == 'audited' %}{{ m.stage_badge(c) }}{% endif %}</h2>
+  <p>There is no MASTER.md, so there are no issues or waves. Next: {{ m.next_step(c) }}.</p>
+</section>
+{% else %}
+{{ m.progress(c) }}
+
+<section>
+  <h2>Start here</h2>
+  {% if c.start_here_md %}<div class="md starthere">{{ md(c.start_here_md, c.path, c.repo, 1) }}</div>{% else %}<p class="muted">No START HERE section.</p>{% endif %}
+</section>
+
+<section>
+  <h2>Waves {% if c.waves %}<span class="muted">{{ c.waves_done() }}/{{ c.waves|length }} done</span>{% endif %}</h2>
+  {% for w in c.waves %}
+    <h3>{% if w.done(c.issues) %}☑ {% endif %}{{ w.name }}</h3>
+    <table class="issues">
+      <thead><tr><th>ID</th><th>Status</th><th>Title / outcome</th><th>Model</th><th>Commits</th></tr></thead>
+      <tbody>
+      {% for iid in w.issue_ids %}{% set i = c.issues[iid] %}
+        {% include "_issue_row.html" %}
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endfor %}
+  {% set rest = c.unwaved_issues() %}
+  {% if rest %}
+    <h3>{% if c.waves %}Not in any wave{% else %}Issues{% endif %}</h3>
+    <table class="issues">
+      <thead><tr><th>ID</th><th>Status</th><th>Title / outcome</th><th>Model</th><th>Commits</th></tr></thead>
+      <tbody>{% for i in rest %}{% include "_issue_row.html" %}{% endfor %}</tbody>
+    </table>
+  {% endif %}
+  {% if not c.has_status_table %}<p class="muted">MASTER.md has no Status table, so issue status is unknown.</p>{% endif %}
+</section>
+{% endif %}
+
+<section>
+  <h2>Decisions {% if c.stage == 'brainstorm' %}<span class="muted small">from DESIGN.md</span> {% endif %}{% if c.decisions %}<span class="muted">{{ c.open_decisions()|length }} open of {{ c.decisions|length }}</span>{% endif %}</h2>
+  {% for d in c.decisions|sort(attribute='open', reverse=true) %}
+    <details class="decision {{ 'open' if d.open else 'settled' }}"{% if d.open %} open{% endif %}>
+      <summary><span class="badge {{ 'wip' if d.open else 'done' }}">{{ 'open' if d.open else 'settled' }}</span> <strong>{{ d.id }}</strong> {{ d.subject }}</summary>
+      <div class="md">{{ md(d.text, c.path, c.repo, 1) }}</div>
+    </details>
+  {% else %}<p class="muted">None recorded.</p>{% endfor %}
+</section>
+
+{% if c.findings %}
+<section>
+  <h2>Findings</h2>
+  <p>
+    {% for k, v in c.findings.by_severity|dictsort %}<span class="chip">{{ k }}: {{ v }}</span>{% endfor %}
+    <span class="sep">·</span>
+    {% for k, v in c.findings.by_verification|dictsort %}<span class="chip">{{ k }}: {{ v }}</span>{% endfor %}
+    · <a href="FINDINGS.html">FINDINGS.md</a>
+  </p>
+</section>
+{% endif %}
+
+<section>
+  <h2>Log</h2>
+  {% if c.log %}
+  <ul class="log">{% for e in c.log[:15] %}<li><time>{{ e.date }}</time> <span class="md">{{ md(e.text, c.path, c.repo, 1) }}</span></li>{% endfor %}</ul>
+  {% if c.log|length > 15 %}
+  <details><summary>{{ c.log|length - 15 }} older entries</summary>
+    <ul class="log">{% for e in c.log[15:] %}<li><time>{{ e.date }}</time> <span class="md">{{ md(e.text, c.path, c.repo, 1) }}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% else %}<p class="muted">No dated log lines found.</p>{% endif %}
+</section>
+
+<section>
+  <h2>Sessions <span class="muted">{{ sessions|length }}</span></h2>
+  {% if sessions %}
+  <p class="totals"><span class="chip">${{ '%.2f'|format(sessions|map(attribute='cost')|select|sum) }} across these sessions</span></p>
+  {{ m.session_table(sessions, root, show_where=true) }}
+  {% else %}<p class="muted">No session log shows a write to this folder.</p>{% endif %}
+</section>
+
+<section>
+  <h2>Files</h2>
+  <ul class="files">{% for f in c.files %}<li><a href="{{ page_for(f) }}">{{ f }}</a></li>{% endfor %}</ul>
+</section>
+{% endblock %}

@@ -1,0 +1,25 @@
+[project]
+name = "campaign-dashboard"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Ashfaq Farooqui", email = "ashfaq@ashfaqfarooqui.me" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "jinja2>=3.1.6",
+    "markdown-it-py>=4.2.0",
+]
+
+[project.scripts]
+campaign-dashboard = "campaign_dashboard:main"
+
+[build-system]
+requires = ["uv_build>=0.9.11,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

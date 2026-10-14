@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ heading }} — Campaigns{% endblock %}
+{% block crumbs %}{% if project %}<span class="sep">/</span><span>{{ heading }}</span>{% endif %}{% endblock %}
+{% block main %}
+{% if project and project.dir %}<p class="meta"><code>{{ project.dir }}</code></p>{% endif %}
+
+{% set live = sessions|selectattr('live')|list %}
+{% if live %}
+<section>
+  <h1>Running now <span class="muted">{{ live|length }}</span></h1>
+  {{ m.session_table(live, root, show_where=not (project and project.dir)) }}
+</section>
+{% endif %}
+
+<section class="waiting">
+  <h1>Waiting on you</h1>
+  {% set ns = namespace(any=false) %}
+  {% for c in campaigns %}
+    {% set aw = c.start_here.get('awaiting') %}
+    {% set show_aw = aw and not aw.lower().startswith('nothing') %}
+    {% set od = c.open_decisions() %}
+    {% set pre = c.stage in ('brainstorm', 'audited') and not (c.design and c.design.verdict and "don't" in c.design.verdict.lower()) %}
+    {% if show_aw or od or pre %}{% set ns.any = true %}
+    <article class="wait">
+      <h2><a href="{{ root }}{{ c.slug }}/index.html">{{ c.slug }}</a>{% if not project %} <span class="muted">{{ project_of[c.slug].label }}</span>{% endif %}</h2>
+      {% if show_aw %}<div class="md">{{ md(aw, c.path, c.repo, depth) }}</div>{% endif %}
+      {% if pre %}<p>{{ m.stage_badge(c) }} {{ m.next_step(c) }}</p>{% endif %}
+      {% if od %}
+      <details><summary>{{ od|length }} open decision{{ 's' if od|length > 1 }}: {{ od|map(attribute='id')|join(', ') }}</summary>
+        {% for d in od %}<div class="md decision">{{ md(d.text, c.path, c.repo, depth) }}</div>{% endfor %}
+      </details>
+      {% endif %}
+    </article>
+    {% endif %}
+  {% endfor %}
+  {% if not ns.any %}<p class="muted">Nothing is waiting on you{% if project %} here{% endif %}.</p>{% endif %}
+</section>
+
+<section>
+  <h1>Campaigns <span class="muted">{{ campaigns|length }}</span></h1>
+  {% if campaigns %}
+  <div class="cards">
+  {% for c in campaigns %}{{ m.card(c, root, depth, None if project else project_of[c.slug]) }}{% endfor %}
+  </div>
+  {% else %}<p class="muted">No campaigns{% if project %} in this project{% endif %}.</p>{% endif %}
+</section>
+
+<section>
+  <h1>Plans <span class="muted">{{ plans|length }}</span></h1>
+  {% if plans %}
+  <table class="plans">
+    <thead><tr><th>Plan</th>{% if not project %}<th>Project</th>{% endif %}<th>Modified</th><th>Written from</th></tr></thead>
+    <tbody>
+    {% for p in plans %}
+      <tr>
+        <td><a href="{{ root }}plans/{{ page_for(p.name) }}">{{ p.title }}</a><div class="muted small">{{ p.name }}</div></td>
+        {% if not project %}<td>{% if plan_project[p.name] %}<a href="{{ root }}p/{{ plan_project[p.name].key }}.html">{{ plan_project[p.name].label }}</a>{% else %}<span class="muted">unassigned</span>{% endif %}</td>{% endif %}
+        <td>{{ p.modified }} <span class="muted">· {{ ago(p.modified) }}</span></td>
+        <td class="small">{% for cwd, n in p.writers.most_common() %}<code title="{{ n }} write/edit calls">{{ cwd }}</code> {% else %}<span class="muted">no session log found</span>{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No loose plans{% if project %} in this project{% endif %}.</p>{% endif %}
+</section>
+
+<section>
+  <h1>Sessions <span class="muted">{{ sessions|length }}</span></h1>
+  {% if sessions %}
+  <p class="totals">
+    <span class="chip">${{ '%.2f'|format(sessions|map(attribute='cost')|select|sum) }} total</span>
+    <span class="chip">{{ sessions|sum(attribute='prompts') }} prompts</span>
+    <span class="chip">+{{ sessions|sum(attribute='lines_added') }} −{{ sessions|sum(attribute='lines_removed') }} lines</span>
+    {% if not project or not project.dir %}<span class="muted small">Sessions whose directory has no campaign or plan show up under Unassigned.</span>{% endif %}
+  </p>
+  {{ m.session_table(sessions, root, show_where=not (project and project.dir), limit=none if project else 25) }}
+  {% else %}<p class="muted">No Claude Code sessions{% if project %} in this project{% endif %}.</p>{% endif %}
+</section>
+{% endblock %}

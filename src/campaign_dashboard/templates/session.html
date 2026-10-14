@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ s.label[:60] }} — Sessions{% endblock %}
+{% block crumbs %}{% set p = session_project[s.id] %}<span class="sep">/</span>{% if p %}<a href="../p/{{ p.key }}.html">{{ p.label }}</a>{% else %}<a href="../p/unassigned.html">Unassigned</a>{% endif %}<span class="sep">/</span><span>session {{ s.id[:8] }}</span>{% endblock %}
+{% block main %}
+<h1>{% if s.live %}<span class="badge {{ 'wip' if s.live == 'busy' else 'done' }}">● {{ s.live }}</span> {% endif %}{{ s.label }}</h1>
+<p class="meta">
+  <code>{{ s.cwd or '?' }}</code>
+  {% if s.branch and s.branch != 'HEAD' %} · branch <code>{{ s.branch }}</code>{% endif %}
+  {% if s.started %} · {{ s.started.strftime('%Y-%m-%d %H:%M') }} → {{ s.ended.strftime('%Y-%m-%d %H:%M') }} ({{ duration(s.started, s.ended) }}){% endif %}
+</p>
+<p class="meta"><code>cd {{ s.cwd or '.' }} && claude -r {{ s.id }}</code></p>
+<p class="totals">
+  <span class="chip">{% if s.cost is not none %}${{ '%.2f'|format(s.cost) }}{% else %}cost not recorded yet{% endif %}</span>
+  <span class="chip">{{ s.prompts }} prompt{{ 's' if s.prompts != 1 }}</span>
+  <span class="chip">{{ '{:,}'.format(s.tools.calls.values()|sum) }} tool calls</span>
+  {% if s.subagents %}<span class="chip">{{ s.subagents }} subagent{{ 's' if s.subagents != 1 }}</span>{% endif %}
+  {% if s.lines_added or s.lines_removed %}<span class="chip">+{{ s.lines_added }} −{{ s.lines_removed }} lines</span>{% endif %}
+  {% for name in s.models %}<span class="chip">{{ name|replace('claude-', '') }}</span>{% endfor %}
+  {% for rel in plan_links(s) %}<a class="chip" href="{{ root }}{{ rel.href }}">{{ rel.label }}</a>{% endfor %}
+  {% for pr in s.prs %}<a class="chip" href="{{ pr }}">PR #{{ pr.rsplit('/', 1)[-1] }}</a>{% endfor %}
+  {% if s.continued_in %}<span class="chip">continued in {% if s.continued_in in session_project %}<a href="{{ s.continued_in }}.html">{{ s.continued_in[:8] }}</a>{% else %}{{ s.continued_in[:8] }}{% endif %}</span>{% endif %}
+  {% for prev in continued_from %}<span class="chip">continues <a href="{{ prev.id }}.html">{{ prev.id[:8] }}</a></span>{% endfor %}
+</p>
+
+<section>
+  <h2>Prompts <span class="muted">{{ s.prompts }}</span></h2>
+  {% if s.prompt_log %}
+  <ol class="prompts">
+  {% for pr in s.prompt_log %}
+    <li><time>{{ pr.at.strftime('%m-%d %H:%M') if pr.at else '' }}</time>
+      {% if pr.text|length > 1200 %}<details><summary class="prompt">{{ pr.text[:400] }}…</summary><div class="prompt">{{ pr.text }}</div></details>
+      {% else %}<div class="prompt">{{ pr.text }}</div>{% endif %}
+    </li>
+  {% endfor %}
+  </ol>
+  {% else %}<p class="muted">No typed prompts in this log.</p>{% endif %}
+  {% if s.commands %}<p class="small">Slash commands: {% for c, n in s.commands.most_common() %}<span class="chip">/{{ c }}{% if n > 1 %} ×{{ n }}{% endif %}</span>{% endfor %}</p>{% endif %}
+</section>
+
+<section>
+  <h2>Tools</h2>
+  {% if tool_rows %}
+  {% if s.tools.skills %}<p class="small">Skills: {% for k, n in s.tools.skills.most_common() %}<span class="chip">{{ k }}{% if n > 1 %} ×{{ n }}{% endif %}</span>{% endfor %}</p>{% endif %}
+  {{ m.tool_table(tool_rows) }}
+  {% if s.subagents %}<p class="muted small">Includes the calls made by this session's subagents.</p>{% endif %}
+  {% else %}<p class="muted">No tool calls.</p>{% endif %}
+</section>
+
+{% if s.agents %}
+<section>
+  <h2>Subagents <span class="muted">{{ s.subagents }}</span></h2>
+  <table class="plans usage">
+    <thead><tr><th>Agent</th><th>Type</th><th class="num">Tool calls</th><th>Most used</th></tr></thead>
+    <tbody>
+    {% for a in s.agents %}
+      <tr><td>{{ a.description or a.id }}</td><td><code>{{ a.type or '?' }}</code></td>
+        <td class="num">{{ a.tools.calls.values()|sum }}{% set bad = a.tools.errors.values()|sum %}{% if bad %} <span class="muted small">{{ bad }} err</span>{% endif %}</td>
+        <td class="small">{% for k, n in a.tools.calls.most_common(4) %}<span class="chip">{{ k }} {{ n }}</span>{% endfor %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<section>
+  <h2>Files written <span class="muted">{{ s.tools.files|length }}</span></h2>
+  {% if s.tools.files %}
+  <ul class="files">{% for f, n in s.tools.files.most_common() %}<li><a href="{{ file_link(f) }}"><code title="{{ f }}">{{ short_path(f, s.cwd) }}</code></a>{% if n > 1 %} <span class="muted small">×{{ n }}</span>{% endif %}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">No Write or Edit calls.</p>{% endif %}
+</section>
+<p class="muted small">Log: <code>{{ s.path }}</code></p>
+{% endblock %}

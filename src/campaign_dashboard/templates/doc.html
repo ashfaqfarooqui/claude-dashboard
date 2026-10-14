@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ fname }}{% if c %} — {{ c.slug }}{% endif %}{% endblock %}
+{% block crumbs %}{% if project %}<span class="sep">/</span><a href="../p/{{ project.key }}.html">{{ project.label }}</a>{% endif %}{% if c %}<span class="sep">/</span><a href="index.html">{{ c.slug }}</a>{% endif %}<span class="sep">/</span><span>{{ fname }}</span>{% endblock %}
+{% block main %}
+{% if issue %}
+<div class="issuebar">
+  {{ m.status_badge(issue.status) }}
+  {% for k in ['severity', 'model', 'depends on', 'findings', 'raised by'] if header.get(k) %}
+    <span class="chip"><b>{{ k }}</b> {{ header[k] }}</span>
+  {% endfor %}
+  {% if issue.wave %}<span class="chip"><b>wave</b> {{ issue.wave.split('(')[0].strip() }}</span>{% endif %}
+  {% for s in issue.commits %}<code>{{ s[:7] }}</code>{% endfor %}
+</div>
+{% endif %}
+<p class="meta"><a href="{{ file_uri }}">{{ fname }}</a> · {{ '{:,}'.format(size) }} bytes</p>
+{% if body %}
+<article class="md doc">{{ body }}</article>
+{% elif raw is not none %}
+<pre class="raw">{{ raw }}</pre>
+{% else %}
+<p class="muted">Not rendered (binary or larger than 2 MB). Open the <a href="{{ file_uri }}">file</a> directly.</p>
+{% endif %}
+{% if plan %}
+<section>
+  <h2>Sessions that wrote this plan <span class="muted">{{ sessions|length }}</span></h2>
+  {% if sessions %}{{ m.session_table(sessions, root, show_where=true) }}{% else %}<p class="muted">No session log found.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

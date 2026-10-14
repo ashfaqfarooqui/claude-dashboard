@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Campaigns{% endblock %}</title>
+<link rel="stylesheet" href="{{ root }}style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="{{ root }}index.html">Campaigns</a>
+  {% block crumbs %}{% endblock %}
+  <span class="generated">{% if live %}<span id="live" title="updates when the files change">● live</span>{% else %}generated {{ today.isoformat() }}{% endif %}</span>
+</header>
+<nav class="tabs" aria-label="Projects">
+  <a href="{{ root }}index.html"{% if active == 'all' %} aria-current="page"{% endif %}>All</a>
+  {%- for p in projects %}
+  <a href="{{ root }}p/{{ p.key }}.html" title="{{ p.dir }} — {{ p.campaigns|length }} campaigns, {{ p.plans|length }} plans, {{ p.sessions|length }} sessions"{% if active == p.key %} aria-current="page"{% endif %}>{{ p.label }} <span class="n">{{ p.campaigns|length + p.plans|length }}</span></a>
+  {%- endfor %}
+  <a href="{{ root }}p/unassigned.html" title="{{ unassigned.campaigns|length }} campaigns, {{ unassigned.plans|length }} plans, {{ unassigned.sessions|length }} sessions"{% if active == 'unassigned' %} aria-current="page"{% endif %}>Unassigned <span class="n">{{ unassigned.campaigns|length + unassigned.plans|length }}{% if unassigned.sessions %} · {{ unassigned.sessions|length }} sessions{% endif %}</span></a>
+  <a class="aside" href="{{ root }}skills/index.html"{% if active == 'skills' %} aria-current="page"{% endif %}>Skills</a>
+  <a href="{{ root }}usage.html"{% if active == 'usage' %} aria-current="page"{% endif %}>Usage</a>
+</nav>
+<main>
+{% block main %}{% endblock %}
+</main>
+<script>
+// Mermaid is 5 MB, so it is loaded only on pages that have a diagram.
+function renderMermaid() {
+  if (!document.querySelector("pre.mermaid:not([data-processed])")) return;
+  const go = () => {
+    const t = document.documentElement.dataset.theme;
+    const dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default", darkMode: dark });
+    mermaid.run({ querySelector: "pre.mermaid:not([data-processed])" });
+  };
+  if (window.mermaid) return go();
+  const s = document.createElement("script");
+  s.src = "{{ root }}mermaid.min.js";
+  s.onload = go;
+  document.head.appendChild(s);
+}
+{% if live %}
+// Live mode: when the server says the files changed, fetch this page again and swap in only the parts
+// whose HTML changed, keeping which <details> are open. Compares server HTML, not the DOM, since
+// Mermaid rewrites the DOM.
+const PARTS = ["header.top", "nav.tabs", "main"];
+const last = Object.fromEntries(PARTS.map(s => [s, document.querySelector(s)?.innerHTML]));
+const dot = document.getElementById("live");
+const events = new EventSource("/events");
+events.onopen = () => { dot.classList.remove("off"); };
+events.onerror = () => { dot.classList.add("off"); dot.title = "server not reachable; retrying"; };
+events.onmessage = async () => {
+  const r = await fetch(location.href, { cache: "no-store" });
+  if (!r.ok) return;
+  const doc = new DOMParser().parseFromString(await r.text(), "text/html");
+  for (const sel of PARTS) {
+    const cur = document.querySelector(sel), next = doc.querySelector(sel);
+    if (!cur || !next || last[sel] === next.innerHTML) continue;
+    last[sel] = next.innerHTML;
+    const open = [...cur.querySelectorAll("details")].map(d => d.open);
+    cur.innerHTML = next.innerHTML;
+    const ds = cur.querySelectorAll("details");
+    if (ds.length === open.length) ds.forEach((d, i) => { d.open = open[i]; });
+  }
+  renderMermaid();
+};
+{% endif %}
+renderMermaid();
+</script>
+</body>
+</html>

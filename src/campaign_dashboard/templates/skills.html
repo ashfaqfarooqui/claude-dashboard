@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Skills — Campaigns{% endblock %}
+{% block crumbs %}<span class="sep">/</span><span>Skills</span>{% endblock %}
+{% block main %}
+<h1>Skills and commands <span class="muted">{{ total }}</span></h1>
+<p class="muted small">Everything Claude Code can load on this machine. Use counts come from the session logs
+  on disk (about the last 30 days): <em>Claude</em> = the Skill tool, <em>you</em> = typed as <code>/name</code>.</p>
+<p><input id="skill-filter" class="filter" type="search" placeholder="Filter by name or description" aria-label="Filter skills"></p>
+
+{% for source, docs in groups.items() %}
+<section class="skill-group">
+  <h2>{{ source }} <span class="muted">{{ docs|length }}</span></h2>
+  <table class="plans skills">
+    <thead><tr><th>Name</th><th>What it does</th><th class="num">Used</th><th>Points to</th></tr></thead>
+    <tbody>
+    {% for sk in docs %}{% set uu = usage_of[sk.name] %}
+      <tr data-search="{{ (sk.name ~ ' ' ~ sk.description ~ ' ' ~ sk.meta.get('when_to_use', ''))|lower }}">
+        <td class="nowrap"><a href="{{ sk.key }}/index.html"><code>{{ '/' if sk.kind == 'command' }}{{ sk.name }}</code></a>
+          {% if sk.kind == 'command' %}<span class="chip">command</span>{% endif %}
+          {% if sk.name in dupes %}<span class="chip warn" title="another skill has the same name">duplicate name</span>{% endif %}</td>
+        <td><div class="clamp1">{{ sk.description }}</div>
+          {% if sk.meta.get('when_to_use') %}<div class="muted small clamp1">{{ sk.meta['when_to_use'] }}</div>{% endif %}</td>
+        <td class="num nowrap">{% if uu.invoked or uu.typed %}{{ uu.invoked + uu.typed }}<div class="muted small">{{ ago(uu.last.date()) if uu.last }}</div>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="small">{% for r in sk.refs %}<a class="chip" href="{{ by_key[r].key }}/index.html">{{ r }}</a>{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+<script>
+(() => {
+  const input = document.getElementById("skill-filter");
+  input.addEventListener("input", () => {
+    const q = input.value.trim().toLowerCase();
+    for (const group of document.querySelectorAll(".skill-group")) {
+      let shown = 0;
+      for (const row of group.querySelectorAll("tbody tr")) {
+        const hit = !q || row.dataset.search.includes(q);
+        row.hidden = !hit;
+        shown += hit;
+      }
+      group.hidden = shown === 0;
+    }
+  });
+})();
+</script>
+{% endblock %}

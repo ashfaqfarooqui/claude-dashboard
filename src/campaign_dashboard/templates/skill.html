@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ sk.name }}{% if file %} · {{ file }}{% endif %} — Skills{% endblock %}
+{% block crumbs %}<span class="sep">/</span><a href="{{ root }}skills/index.html">Skills</a><span class="sep">/</span>{% if file %}<a href="{{ root }}skills/{{ sk.key }}/index.html">{{ sk.name }}</a><span class="sep">/</span><span>{{ file }}</span>{% else %}<span>{{ sk.name }}</span>{% endif %}{% endblock %}
+{% block main %}
+<h1><code>{{ '/' if sk.kind == 'command' }}{{ sk.name }}</code>{% if file %} <span class="muted">{{ file }}</span>{% endif %}</h1>
+{% if not file %}
+<p class="lead">{{ sk.description }}</p>
+<p class="meta">{{ sk.kind }} · {{ sk.source }} · <a href="{{ sk.path.resolve().as_uri() }}"><code>{{ sk.path }}</code></a></p>
+{% if dupe %}<p class="error">Another skill or command has the same name. Claude Code shows both; keep one.</p>{% endif %}
+<p class="totals">
+  {% if used.invoked or used.typed %}
+  <span class="chip">Claude invoked {{ used.invoked }}</span><span class="chip">you typed {{ used.typed }}</span>
+  <span class="chip">last used {{ ago(used.last.date()) if used.last else '—' }}</span>
+  {% else %}<span class="chip muted">not used in the session logs on disk</span>{% endif %}
+</p>
+{% set meta_rest = sk.meta.items()|rejectattr(0, 'in', ['name', 'description'])|list %}
+{% if meta_rest %}
+<dl class="skillmeta">{% for k, v in meta_rest %}<dt>{{ k }}</dt><dd>{{ v }}</dd>{% endfor %}</dl>
+{% endif %}
+{% if sk.refs or referenced_by %}
+<p class="small">
+  {% if sk.refs %}Points to: {% for r in sk.refs %}<a class="chip" href="{{ root }}skills/{{ by_key[r].key }}/index.html">{{ r }}</a>{% endfor %}{% endif %}
+  {% if referenced_by %}<br>Referenced by: {% for o in referenced_by %}<a class="chip" href="{{ root }}skills/{{ o.key }}/index.html">{{ o.name }}</a>{% endfor %}{% endif %}
+</p>
+{% endif %}
+{% if sk.files %}
+<details class="more"><summary>{{ sk.files|length }} other file{{ 's' if sk.files|length != 1 }} in this skill</summary>
+  <ul class="files">{% for f in sk.files %}{% set rel = f.relative_to(sk.folder)|string %}<li><a href="{{ root }}skills/{{ sk.key }}/{{ page_for(rel) }}">{{ rel }}</a></li>{% endfor %}</ul>
+</details>
+{% endif %}
+{% else %}
+<p class="meta"><a href="{{ file_uri }}">open the file</a></p>
+{% endif %}
+{% if body %}<article class="md doc">{{ body }}</article>
+{% elif raw is defined and raw is not none %}<pre class="raw">{{ raw }}</pre>
+{% elif file %}<p class="muted">Not rendered (binary or larger than 2 MB).</p>{% endif %}
+{% endblock %}

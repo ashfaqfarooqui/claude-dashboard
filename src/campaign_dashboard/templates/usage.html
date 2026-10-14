@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Usage — Campaigns{% endblock %}
+{% block crumbs %}<span class="sep">/</span><span>Usage</span>{% endblock %}
+{% block main %}
+<h1>Usage <span class="muted">{{ sessions|length }} sessions</span></h1>
+<p class="totals">
+  <span class="chip">{{ '{:,}'.format(u.tools|sum(attribute='count')) }} tool calls</span>
+  <span class="chip">{{ u.tools|sum(attribute='errors') }} errors</span>
+  <span class="chip warn">{{ u.tools|sum(attribute='rejected') }} rejected by you</span>
+  <span class="chip bad">{{ u.tools|sum(attribute='denied') }} denied by rules or the classifier</span>
+  <span class="chip">{{ u.agents|sum(attribute='count') }} subagents</span>
+</p>
+<p class="muted small">Counts cover each session and its subagents. Rejected means you said no at the prompt;
+  denied means a permission rule or the auto-mode classifier blocked the call.</p>
+
+<section>
+  <h2>Skills</h2>
+  {% if u.skills %}
+  {%- set top = u.skills|map(attribute='count')|max -%}
+  <table class="plans usage">
+    <thead><tr><th>Skill</th><th class="num" title="Skill tool calls">Claude invoked</th><th class="barcol"></th><th class="num" title="typed as /name">You typed</th><th class="num">Sessions</th><th>Last used</th></tr></thead>
+    <tbody>
+    {% for r in u.skills %}
+      <tr><td><code>{{ r.name }}</code></td><td class="num">{{ r.count }}</td><td class="barcol">{{ m.bar(r.count, top, 'invocations') }}</td>
+        <td class="num">{{ r.extra or '' }}</td><td class="num">{{ r.sessions }}</td><td>{{ ago(r.last.date()) if r.last else '—' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No skill calls.</p>{% endif %}
+</section>
+
+<section>
+  <h2>Tools</h2>
+  {{ m.tool_table(u.tools, show_sessions=true) }}
+</section>
+
+<div class="split">
+<section>
+  <h2>MCP servers</h2>
+  {% if u.mcp %}
+  <table class="plans usage"><thead><tr><th>Server</th><th class="num">Calls</th><th class="num">Sessions</th><th>Last used</th></tr></thead><tbody>
+  {% for r in u.mcp %}<tr><td>{{ r.name }}</td><td class="num">{{ r.count }}</td><td class="num">{{ r.sessions }}</td><td>{{ ago(r.last.date()) if r.last else '—' }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<p class="muted">No MCP calls.</p>{% endif %}
+</section>
+
+<section>
+  <h2>Subagent types</h2>
+  <table class="plans usage"><thead><tr><th>Type</th><th class="num">Spawned</th><th class="num">Their tool calls</th><th class="num">Sessions</th></tr></thead><tbody>
+  {% for r in u.agents %}<tr><td><code>{{ r.name }}</code></td><td class="num">{{ r.count }}</td><td class="num">{{ '{:,}'.format(r.extra) }}</td><td class="num">{{ r.sessions }}</td></tr>{% else %}<tr><td colspan="4" class="muted">None.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+
+<section>
+  <h2>Slash commands</h2>
+  <table class="plans usage"><thead><tr><th>Command</th><th class="num">Typed</th><th class="num">Sessions</th><th>Last used</th></tr></thead><tbody>
+  {% for r in u.commands %}<tr><td><code>/{{ r.name }}</code></td><td class="num">{{ r.count }}</td><td class="num">{{ r.sessions }}</td><td>{{ ago(r.last.date()) if r.last else '—' }}</td></tr>{% else %}<tr><td colspan="4" class="muted">None.</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+</div>
+
+<section>
+  <h2>By project</h2>
+  <table class="plans usage">
+    <thead><tr><th>Project</th><th class="num">Sessions</th><th class="num">Cost</th><th class="num">Tool calls</th><th>Top tools</th><th>Skills</th></tr></thead>
+    <tbody>
+    {% for p, pu in by_project %}
+      <tr><td>{% if p.dir %}<a href="p/{{ p.key }}.html">{{ p.label }}</a>{% else %}<a href="p/unassigned.html">Unassigned</a>{% endif %}</td>
+        <td class="num">{{ p.sessions|length }}</td><td class="num">${{ '%.2f'|format(p.cost) }}</td>
+        <td class="num">{{ '{:,}'.format(pu.tools|sum(attribute='count')) }}</td>
+        <td class="small">{% for r in pu.tools[:4] %}<span class="chip">{{ r.name }} {{ r.count }}</span>{% endfor %}</td>
+        <td class="small">{% for r in pu.skills %}<span class="chip">{{ r.name }}{% if r.count + r.extra > 1 %} ×{{ r.count + r.extra }}{% endif %}</span>{% else %}<span class="muted">—</span>{% endfor %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

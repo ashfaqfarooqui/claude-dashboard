@@ -1,0 +1,139 @@
+{% macro progress(c) -%}
+{%- set n = c.counts() -%}
+{%- set total = c.issues|length -%}
+<div class="progress" role="img" aria-label="{{ n['☑'] }} of {{ total }} done">
+  {%- for g in glyphs|list + ['unknown'] if n[g] %}
+  <span class="seg {{ status_class[g] }}" style="flex-grow: {{ n[g] }}" title="{{ n[g] }} {{ status_names[g] }}"></span>
+  {%- endfor %}
+</div>
+<div class="legend">
+  {%- for g in glyphs|list + ['unknown'] if n[g] %}
+  <span class="key"><i class="dot {{ status_class[g] }}"></i>{{ n[g] }} {{ status_names[g] }}</span>
+  {%- endfor %}
+</div>
+{%- endmacro %}
+
+{% macro git_chip(g) -%}
+{%- if g is none %}{% elif g.error %}<span class="chip muted" title="{{ g.path or '' }}">git: {{ g.error }}</span>
+{%- else %}<span class="chip" title="{{ g.path }}">{{ g.branch }} @ {{ g.head }}</span>
+{%- if g.dirty %}<span class="chip warn">{{ g.dirty }} uncommitted</span>{% else %}<span class="chip">clean</span>{% endif %}
+{%- if g.since_start is not none %}<span class="chip">{{ g.since_start }} commits since plan</span>{% endif %}
+{%- if g.missing_commits %}<span class="chip bad" title="{{ g.missing_commits|join(', ') }}">{{ g.missing_commits|length }} recorded commits not found in this repo</span>{% endif %}
+{%- endif %}
+{%- endmacro %}
+
+{% macro status_badge(s) -%}
+{%- set k = s or 'unknown' -%}
+<span class="badge {{ status_class[k] }}" title="{{ status_names[k] }}">{{ s or '?' }} {{ status_names[k] }}</span>
+{%- endmacro %}
+
+{% macro card(c, root, depth, project=None) -%}
+{%- set total = c.issues|length -%}
+{%- set n = c.counts() -%}
+{%- set cw = c.current_wave() -%}
+<article class="card{% if c.errors %} has-error{% endif %}">
+  <header>
+    <h2><a href="{{ root }}{{ c.slug }}/index.html">{{ c.slug }}</a></h2>
+    {% if c.stage == 'planned' or not c.stage %}<span class="count">{{ n['☑'] + n['✗'] }}/{{ total }}</span>
+    {% else %}<span class="count">{{ stage_badge(c) }}</span>{% endif %}
+  </header>
+  {% if project %}<p class="project"><a href="{{ root }}p/{{ project.key }}.html">{{ project.label }}</a></p>{% endif %}
+  {% if c.errors %}<p class="error">⚠ {{ c.errors|length }} parse error{{ 's' if c.errors|length > 1 }}</p>{% endif %}
+  {% if c.stage in ('brainstorm', 'audited') %}
+  <dl>
+    {% if c.design %}{{ design_rows(c.design) }}{% endif %}
+    {% if c.findings %}<dt>Findings</dt><dd>{% for k, v in c.findings.by_severity|dictsort %}{{ k }}: {{ v }}{{ ' · ' if not loop.last }}{% endfor %}</dd>{% endif %}
+    <dt>Last activity</dt><dd>{{ ago(c.last_activity) }}{% if c.last_activity %} <span class="muted">({{ c.last_activity }})</span>{% endif %}</dd>
+    <dt>Next</dt><dd>{{ next_step(c) }}</dd>
+  </dl>
+  {% else %}
+  {{ progress(c) }}
+  <dl>
+    {% if c.design %}<dt>Design</dt><dd><a href="{{ root }}{{ c.slug }}/DESIGN.html">DESIGN.md</a>{% if c.design.verdict %} · {{ c.design.verdict }}{% endif %}</dd>{% endif %}
+    <dt>Waves</dt><dd>{% if c.waves %}{{ c.waves_done() }}/{{ c.waves|length }} done{% if cw %} · now <em>{{ cw.name.split('(')[0].strip() }}</em>{% endif %}{% else %}—{% endif %}</dd>
+    <dt>Last activity</dt><dd>{{ ago(c.last_activity) }}{% if c.last_activity %} <span class="muted">({{ c.last_activity }})</span>{% endif %}</dd>
+    {% if c.start_here.get('next') %}<dt>Next</dt><dd class="md clamp">{{ md(c.start_here['next'], c.path, c.repo, depth) }}</dd>{% endif %}
+    {% if c.start_here.get('hazards') %}<dt>Hazards</dt><dd class="md clamp">{{ md(c.start_here['hazards'], c.path, c.repo, depth) }}</dd>{% endif %}
+  </dl>
+  {% endif %}
+  <footer>{{ git_chip(c.git) }}</footer>
+</article>
+{%- endmacro %}
+
+{% macro session_rows(sessions, root, show_where) -%}
+{%- for s in sessions %}
+<tr>
+  <td>
+    {% if s.live %}<span class="badge {{ 'wip' if s.live == 'busy' else 'done' }}" title="process {{ s.live_name or '' }} is running">● {{ s.live }}</span> {% endif %}
+    <div class="clamp1" title="{{ s.first_prompt or '' }}"><a href="{{ root }}s/{{ s.id }}.html">{{ s.label }}</a></div>
+    {% if s.title and s.first_prompt and s.first_prompt != s.title %}<div class="muted small clamp1">{{ s.first_prompt }}</div>{% endif %}
+    <div class="small"><code>claude -r {{ s.id }}</code>{% if s.continued_in %} <span class="muted">→ continued in <code>{{ s.continued_in[:8] }}</code></span>{% endif %}</div>
+  </td>
+  {% if show_where %}<td class="small">{% set p = session_project[s.id] %}{% if p %}<a href="{{ root }}p/{{ p.key }}.html">{{ p.label }}</a>{% else %}<code>{{ s.cwd or '?' }}</code>{% endif %}</td>{% endif %}
+  <td class="nowrap">{% if s.ended %}{{ ago(s.ended.date()) }}<div class="muted small">{{ s.ended.strftime('%Y-%m-%d %H:%M') }}{% if s.started %} · {{ duration(s.started, s.ended) }}{% endif %}</div>{% else %}—{% endif %}</td>
+  <td class="num">{{ s.prompts }}{% if s.subagents %}<div class="muted small" title="subagents">+{{ s.subagents }} agents</div>{% endif %}</td>
+  <td class="num">{% if s.cost is not none %}${{ '%.2f'|format(s.cost) }}{% else %}<span class="muted">—</span>{% endif %}{% if s.lines_added or s.lines_removed %}<div class="muted small">+{{ s.lines_added }} −{{ s.lines_removed }}</div>{% endif %}</td>
+  <td class="small">
+    {%- for name in s.models[:2] %}<span class="chip">{{ name|replace('claude-', '') }}</span>{% endfor %}
+    {%- if s.branch and s.branch != 'HEAD' %}<span class="chip" title="git branch">{{ s.branch }}</span>{% endif %}
+    {%- for rel in plan_links(s) %}<a class="chip" href="{{ root }}{{ rel.href }}">{{ rel.label }}</a>{% endfor %}
+    {%- for pr in s.prs %}<a class="chip" href="{{ pr }}">PR #{{ pr.rsplit('/', 1)[-1] }}</a>{% endfor %}
+  </td>
+</tr>
+{%- endfor %}
+{%- endmacro %}
+
+{% macro session_table(sessions, root, show_where=false, limit=none) -%}
+{%- set head = sessions[:limit] if limit else sessions -%}
+{%- set rest = sessions[limit:] if limit else [] -%}
+{%- set thead -%}
+<thead><tr><th>Session</th>{% if show_where %}<th>Where</th>{% endif %}<th>Last active</th><th class="num">Prompts</th><th class="num">Cost</th><th>Model · branch · plans · PRs</th></tr></thead>
+{%- endset -%}
+<table class="plans sessions">{{ thead }}<tbody>{{ session_rows(head, root, show_where) }}</tbody></table>
+{% if rest %}<details class="more"><summary>{{ rest|length }} older session{{ 's' if rest|length > 1 }}</summary>
+<table class="plans sessions">{{ thead }}<tbody>{{ session_rows(rest, root, show_where) }}</tbody></table>
+</details>{% endif %}
+{%- endmacro %}
+
+{% macro bar(n, top, what='') -%}
+<span class="bar" role="img" aria-label="{{ n }}{{ ' ' ~ what if what }}" title="{{ n }}{{ ' ' ~ what if what }}"><i style="width: {{ (100 * n / top) if top else 0 }}%"></i></span>
+{%- endmacro %}
+
+{% macro tool_table(rows, show_sessions=false) -%}
+{%- set top = rows|map(attribute='count')|max if rows else 0 -%}
+<table class="plans usage">
+  <thead><tr><th>Tool</th><th class="num">Calls</th><th class="barcol"></th>{% if show_sessions %}<th class="num">Sessions</th>{% endif %}<th class="num" title="tool returned an error">Errors</th><th class="num" title="you said no at the permission prompt">Rejected</th><th class="num" title="blocked by a permission rule or the auto-mode classifier">Denied</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td><code>{{ r.name }}</code></td>
+    <td class="num">{{ '{:,}'.format(r.count) }}</td>
+    <td class="barcol">{{ bar(r.count, top, 'calls') }}</td>
+    {% if show_sessions %}<td class="num">{{ r.sessions }}</td>{% endif %}
+    <td class="num">{% if r.errors %}{{ r.errors }} <span class="muted small">{{ '%.0f'|format(100 * r.errors / r.count) if r.count }}%</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+    <td class="num">{% if r.rejected %}<span class="chip warn">{{ r.rejected }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+    <td class="num">{% if r.denied %}<span class="chip bad">{{ r.denied }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{%- endmacro %}
+
+
+{% macro stage_badge(c) -%}
+<span class="badge {{ 'wip' if c.stage == 'brainstorm' else 'ready' }}" title="no MASTER.md yet">{{ 'brainstorm' if c.stage == 'brainstorm' else 'audit' }}</span>
+{%- endmacro %}
+
+{% macro design_rows(d) -%}
+{%- set n = d.settled.values()|select|list|length -%}
+<dt>Design</dt><dd>{{ d.status or 'status not set' }}{% if d.verdict %} · verdict <strong>{{ d.verdict }}</strong>{% endif %}</dd>
+<dt>Checklist</dt><dd>{{ n }}/{{ d.settled|length }} settled{% if n < d.settled|length %} <span class="muted">· open: {{ d.settled|dictsort|rejectattr(1)|map(attribute=0)|join(', ') }}</span>{% endif %}</dd>
+{% if d.disagreements %}<dt>Disagreements</dt><dd>{{ d.disagreements }}</dd>{% endif %}
+{%- endmacro %}
+
+{% macro next_step(c) -%}
+{%- if c.stage == 'audited' %}<code>/campaign-plan {{ c.slug }}</code> once the findings are reviewed
+{%- elif c.design.verdict and "don't" in c.design.verdict.lower() %}nothing — the verdict was not to build
+{%- elif c.design.agreed %}<code>/campaign-plan {{ c.slug }}</code>
+{%- else %}finish the brainstorm: <code>/campaign-brainstorm {{ c.slug }}</code>{% endif %}
+{%- endmacro %}
