@@ -1,0 +1,14 @@
+{
+  "name": "ashfaqf",
+  "description": "Ashfaq Farooqui's Claude Code plugins",
+  "owner": {
+    "name": "Ashfaq Farooqui"
+  },
+  "plugins": [
+    {
+      "name": "campaign",
+      "source": "./",
+      "description": "Campaign skills: brainstorm, audit, plan and run structured coding work"
+    }
+  ]
+}

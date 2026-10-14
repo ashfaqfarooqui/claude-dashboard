@@ -15,7 +15,7 @@ from .projects import attribute_plans, group, load_loose_plans
 from .render import Renderer
 from .server import Site, serve
 from .sessions import load_sessions
-from .skills import load_skills
+from .skills import in_place_roots, load_skills
 
 
 GIT_FILES = ("HEAD", "index", "logs/HEAD")  # change on commit, checkout and staging
@@ -73,6 +73,7 @@ def watched(args) -> list[tuple[Path, str]]:
     roots = [(args.plans_dir, "**/*"), (args.sessions_dir, "*/*.jsonl"), (args.sessions_dir, "*/*/subagents/*.jsonl"),
              (args.live_dir, "*.json"), (args.claude_dir / "skills", "**/*"), (args.claude_dir / "commands", "*.md"),
              (args.claude_dir / "plugins" / "installed_plugins.json", ""), (args.claude_dir / "settings.json", "")]
+    roots += [(root / "skills", "**/*") for root in in_place_roots(args.claude_dir).values()]
     if not args.no_git:
         repos = {c.repo for c in load(args.plans_dir, with_git=False) if c.repo}
         roots += [(Path(r) / ".git" / name, "") for r in sorted(repos) for name in GIT_FILES]

@@ -51,13 +51,13 @@ class LogEntry:
     text: str
 
 
-# The clarity checklist of campaign-brainstorm: one DESIGN.md section each.
+# The clarity checklist of campaign:brainstorm: one DESIGN.md section each.
 CHECKLIST = ("Problem", "Who and why now", "Success", "Constraints", "Scope", "Approach", "Risks", "Verification")
 
 
 @dataclass
 class Design:
-    """DESIGN.md, the brief campaign-brainstorm writes before a campaign is planned."""
+    """DESIGN.md, the brief campaign:brainstorm writes before a campaign is planned."""
 
     status: str | None = None  # "in progress" | "agreed YYYY-MM-DD"
     verdict: str | None = None  # build | build smaller | don't build | open

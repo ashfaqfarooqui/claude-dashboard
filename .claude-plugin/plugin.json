@@ -1,0 +1,7 @@
+{
+  "name": "campaign",
+  "version": "0.1.0",
+  "description": "Plan, run and track structured coding work as local campaigns: brainstorm, audit, plan, run, plus the ste, programming and test-audit rules the agents follow",
+  "author": { "name": "Ashfaq Farooqui", "email": "ashfaq@ashfaqfarooqui.me" },
+  "license": "MIT"
+}

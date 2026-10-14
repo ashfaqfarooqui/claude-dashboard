@@ -132,8 +132,8 @@
 {%- endmacro %}
 
 {% macro next_step(c) -%}
-{%- if c.stage == 'audited' %}<code>/campaign-plan {{ c.slug }}</code> once the findings are reviewed
+{%- if c.stage == 'audited' %}<code>/campaign:plan {{ c.slug }}</code> once the findings are reviewed
 {%- elif c.design.verdict and "don't" in c.design.verdict.lower() %}nothing — the verdict was not to build
-{%- elif c.design.agreed %}<code>/campaign-plan {{ c.slug }}</code>
-{%- else %}finish the brainstorm: <code>/campaign-brainstorm {{ c.slug }}</code>{% endif %}
+{%- elif c.design.agreed %}<code>/campaign:plan {{ c.slug }}</code>
+{%- else %}finish the brainstorm: <code>/campaign:brainstorm {{ c.slug }}</code>{% endif %}
 {%- endmacro %}

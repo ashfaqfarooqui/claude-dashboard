@@ -6,6 +6,8 @@ Sources, in the order they are listed:
 - ~/.claude/skills/synced/<org>/<name>/        skills synced from claude.ai   (anthropic-skills:)
 - ~/.claude/plugins/synced/<org>/<plugin>~*/   plugins synced from claude.ai  (<plugin>:)
 - installed_plugins.json entries enabled in settings.json                      (<plugin>:)
+  read from their source folder when the marketplace was added from a local directory, since
+  Claude Code loads those in place and the cached copy goes stale
 - <project>/.claude/skills and /commands for each dashboard project
 
 Plugins that are only in a marketplace checkout, and anything under plugins/.trash, are not
@@ -123,12 +125,37 @@ def _installed_plugins(claude_dir: Path) -> list[SkillDoc]:
         enabled = json.loads((claude_dir / "settings.json").read_text()).get("enabledPlugins") or {}
     except (OSError, ValueError, KeyError):
         return []
+    in_place = in_place_roots(claude_dir)
     out = []
     for plugin_id, installs in sorted(installed.items()):
         if not enabled.get(plugin_id) or not installs:
             continue
         name = plugin_id.split("@")[0]
-        out += _from_root(Path(installs[-1]["installPath"]), f"{name}:", f"Plugin: {plugin_id}")
+        root = in_place.get(plugin_id, Path(installs[-1]["installPath"]))
+        out += _from_root(root, f"{name}:", f"Plugin: {plugin_id}")
+    return out
+
+
+def in_place_roots(claude_dir: Path) -> dict[str, Path]:
+    """`plugin@marketplace` → source folder, for relative-path plugins in a marketplace added from a
+    local directory (settings.json `extraKnownMarketplaces`, source `directory`)."""
+    try:
+        markets = json.loads((claude_dir / "settings.json").read_text()).get("extraKnownMarketplaces") or {}
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for market, entry in markets.items():
+        src = (entry or {}).get("source") or {}
+        if src.get("source") != "directory" or not src.get("path"):
+            continue
+        mdir = Path(src["path"])
+        try:
+            plugins = json.loads((mdir / ".claude-plugin" / "marketplace.json").read_text())["plugins"]
+        except (OSError, ValueError, KeyError):
+            continue
+        for p in plugins:
+            if isinstance(p.get("source"), str):
+                out[f"{p['name']}@{market}"] = (mdir / p["source"]).resolve()
     return out
 
 

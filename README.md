@@ -1,7 +1,33 @@
-# campaign-dashboard
+# campaign
+
+Two things in one repo:
+
+- **The `campaign` Claude Code plugin** (`skills/`): `/campaign:brainstorm`, `/campaign:audit`,
+  `/campaign:plan` and `/campaign:run`, which turn work into local campaign folders in
+  `~/.claude/plans/<slug>/` (a MASTER.md tracker, one file per issue, a log), plus the `ste`,
+  `programming` and `test-audit` rules that the campaign agents follow.
+- **campaign-dashboard** (`src/`): an HTML view of those folders and of your Claude Code sessions.
+
+## Install
+
+Clone the repo and register the clone as a plugin marketplace. Claude Code then loads the skills
+from the clone itself, so `git pull` (and `/reload-plugins` in a running session) updates them.
+
+```sh
+git clone https://github.com/<owner>/<repo> ~/playground/claude-dashboard
+claude plugin marketplace add ~/playground/claude-dashboard
+claude plugin install campaign@ashfaqf
+```
+
+Or open Claude Code in the clone and ask it to "install the campaign plugin from this repo".
+
+Keep the clone where you registered it: new campaigns write the absolute path of the skills into
+their `AGENT_PROMPT.md`.
+
+## Dashboard
 
 HTML overview of the campaign folders in `~/.claude/plans/<slug>/`
-(format: `~/.claude/skills/campaign-plan/reference/format.md`), served live or written once as
+(format: `skills/plan/reference/format.md`), served live or written once as
 static files. Read-only: it never writes to the plans or to any repo.
 
 ```sh
@@ -52,7 +78,7 @@ has a page (START HERE, waves with issue status and outcomes, decisions, finding
 and every file — campaign files and loose plans — is rendered as HTML.
 
 A folder with no MASTER.md yet is shown at its stage instead of as an error: **brainstorm**
-(only `DESIGN.md`, from `campaign-brainstorm`: status, verdict, which clarity-checklist sections are
+(only `DESIGN.md`, from `campaign:brainstorm`: status, verdict, which clarity-checklist sections are
 filled in, disagreements, and its `D<n>` decisions) or **audit** (`FINDINGS.md` without a plan).
 Both are listed under "Waiting on you" with the next command to run; a brainstorm is placed in the
 project whose repo `DESIGN.md` names. Once MASTER.md exists, the campaign page still shows the design

@@ -130,7 +130,7 @@ def test_folders_before_planning_show_their_stage_not_an_error(tmp_path, monkeyp
     main()
 
     waiting = (out / "index.html").read_text().split('class="waiting"')[1].split("</section>")[0]
-    assert "/campaign-brainstorm sdb-watch" in waiting and "/campaign-plan audit-only" in waiting
+    assert "/campaign:brainstorm sdb-watch" in waiting and "/campaign:plan audit-only" in waiting
     assert "parse error" not in (out / "index.html").read_text()
     assert (out / "p" / "sdb-cli.html").read_text().count('href="../sdb-watch/index.html"') >= 1
 
@@ -321,3 +321,25 @@ def test_available_skills_are_found_and_cross_referenced(tmp_path):
     assert run.refs == ["herdr", "test-audit"]  # "commit" in plain prose is not a reference
     assert [f.name for f in run.files] == ["modes.md"]
     assert (docs["commit"].kind, docs["commit"].description) == ("command", "Stage and commit changes.")
+
+
+def test_plugin_from_a_local_marketplace_is_read_from_its_source(tmp_path):
+    """Claude Code loads a relative-path plugin from a marketplace added from a local directory in
+    place, so its skills come from that folder and not from the copy made at install."""
+    home, repo, cache = tmp_path / ".claude", tmp_path / "repo", tmp_path / "cache"
+    for root, desc in ((repo, "current"), (cache, "stale")):
+        (root / "skills" / "plan").mkdir(parents=True)
+        (root / "skills" / "plan" / "SKILL.md").write_text(f"---\nname: plan\ndescription: {desc}\n---\n")
+    (repo / ".claude-plugin").mkdir()
+    (repo / ".claude-plugin" / "marketplace.json").write_text(json.dumps(
+        {"name": "mk", "plugins": [{"name": "campaign", "source": "./"}]}))
+    (home / "plugins").mkdir(parents=True)
+    (home / "plugins" / "installed_plugins.json").write_text(json.dumps(
+        {"plugins": {"campaign@mk": [{"installPath": str(cache)}]}}))
+    (home / "settings.json").write_text(json.dumps({
+        "enabledPlugins": {"campaign@mk": True},
+        "extraKnownMarketplaces": {"mk": {"source": {"source": "directory", "path": str(repo)}}}}))
+
+    docs = {d.name: d for d in load_skills(home)}
+
+    assert docs["campaign:plan"].description == "current"
