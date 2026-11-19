@@ -77,6 +77,8 @@
     <span class="chip">${{ '%.2f'|format(sessions|map(attribute='cost')|select|sum) }} total</span>
     <span class="chip">{{ sessions|sum(attribute='prompts') }} prompts</span>
     <span class="chip">+{{ sessions|sum(attribute='lines_added') }} −{{ sessions|sum(attribute='lines_removed') }} lines</span>
+    {% set gone = sessions|selectattr('prompt_only')|list|length %}
+    {% if gone %}<span class="muted small">{{ gone }} of these have prompts only (transcript deleted): they add prompts and no cost or lines.</span>{% endif %}
     {% if not project or not project.dir %}<span class="muted small">Sessions whose directory has no campaign or plan show up under Unassigned.</span>{% endif %}
   </p>
   {{ m.session_table(sessions, root, show_where=not (project and project.dir), limit=none if project else 25) }}

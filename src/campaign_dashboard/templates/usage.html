@@ -3,7 +3,8 @@
 {% block title %}Usage — Campaigns{% endblock %}
 {% block crumbs %}<span class="sep">/</span><span>Usage</span>{% endblock %}
 {% block main %}
-<h1>Usage <span class="muted">{{ sessions|length }} sessions</span></h1>
+{% set gone = sessions|selectattr('prompt_only')|list|length %}
+<h1>Usage <span class="muted">{{ sessions|length - gone }} sessions{% if gone %} + {{ gone }} with prompts only{% endif %}</span></h1>
 <p class="totals">
   <span class="chip">{{ '{:,}'.format(u.tools|sum(attribute='count')) }} tool calls</span>
   <span class="chip">{{ u.tools|sum(attribute='errors') }} errors</span>
@@ -12,7 +13,8 @@
   <span class="chip">{{ u.agents|sum(attribute='count') }} subagents</span>
 </p>
 <p class="muted small">Counts cover each session and its subagents. Rejected means you said no at the prompt;
-  denied means a permission rule or the auto-mode classifier blocked the call.</p>
+  denied means a permission rule or the auto-mode classifier blocked the call.
+  A session whose transcript is deleted has prompts only: it adds to the slash-command counts and to nothing else.</p>
 
 <section>
   <h2>Skills</h2>
@@ -67,7 +69,7 @@
     <tbody>
     {% for p, pu in by_project %}
       <tr><td>{% if p.dir %}<a href="p/{{ p.key }}.html">{{ p.label }}</a>{% else %}<a href="p/unassigned.html">Unassigned</a>{% endif %}</td>
-        <td class="num">{{ p.sessions|length }}</td><td class="num">${{ '%.2f'|format(p.cost) }}</td>
+        <td class="num">{{ p.sessions|length }}{% set pg = p.sessions|selectattr('prompt_only')|list|length %}{% if pg %} <span class="muted small" title="transcript deleted, no cost or tools">({{ pg }} prompts only)</span>{% endif %}</td><td class="num">${{ '%.2f'|format(p.cost) }}</td>
         <td class="num">{{ '{:,}'.format(pu.tools|sum(attribute='count')) }}</td>
         <td class="small">{% for r in pu.tools[:4] %}<span class="chip">{{ r.name }} {{ r.count }}</span>{% endfor %}</td>
         <td class="small">{% for r in pu.skills %}<span class="chip">{{ r.name }}{% if r.count + r.extra > 1 %} ×{{ r.count + r.extra }}{% endif %}</span>{% else %}<span class="muted">—</span>{% endfor %}</td></tr>

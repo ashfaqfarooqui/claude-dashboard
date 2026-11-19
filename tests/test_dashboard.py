@@ -8,6 +8,7 @@ fixture's Status table ID column, not from the parser.
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import threading
@@ -144,7 +145,7 @@ def test_live_server_shows_file_changes_and_serves_only_campaign_assets(tmp_path
     """Served pages are rendered from the files as they are now: after an edit, one poll is enough for the
     next request to show it. Plan images are served from a campaign's assets/ folder and nothing else.
     Search runs only in live mode: it finds a word in a prompt or a reply, links the session, escapes the
-    query and the text, and the static build has no search box."""
+    query and the text, and the static build has no search box. A new line in history.jsonl shows after one poll."""
     plans = tmp_path / "plans"
     shutil.copytree(FIXTURES / "sdb-watch", plans / "sdb-watch")
     (plans / "sdb-watch" / "assets").mkdir()
@@ -157,9 +158,11 @@ def test_live_server_shows_file_changes_and_serves_only_campaign_assets(tmp_path
               message={"content": [{"type": "text", "text": "A quokka is not a <script>alert(1)</script> tag."}]}),
         _line(type="user", cwd="/tmp/x", message={"content": [{"type": "tool_result", "content": "marmot"}]}),
     ]))
+    history = tmp_path / "history.jsonl"
+    history.write_text(_line(display="first old prompt", timestamp=1_774_000_000_000, project="/w", sessionId="old1") + "\n")
     args = argparse.Namespace(plans_dir=plans, sessions_dir=tmp_path / "projects", live_dir=tmp_path / "no",
                               claude_dir=tmp_path / "no", archive_state=tmp_path / "no", archive_repo=tmp_path / "no",
-                              history=tmp_path / "no", no_git=True, serve=True)
+                              history=history, no_git=True, serve=True)
     static = build_site(argparse.Namespace(**{**vars(args), "serve": False}))
     assert "search.html" not in static.pages and 'role="search"' not in static.pages["index.html"]()
     site = Site(lambda cache: build_site(args, cache), watched(args))
@@ -182,6 +185,12 @@ def test_live_server_shows_file_changes_and_serves_only_campaign_assets(tmp_path
         design.write_text(design.read_text().replace("Cache on disk or in memory?", "Cache format?"))
         assert site.poll() is True and site.version == 1
         assert "Cache format?" in get("sdb-watch/index.html")[1]
+
+        assert "first old prompt" in get("s/old1.html")[1] and get("s/old2.html")[0] == 404
+        with history.open("a") as f:
+            f.write(_line(display="second old prompt", timestamp=1_774_000_100_000, project="/w", sessionId="old2") + "\n")
+        assert site.poll() is True
+        assert "second old prompt" in get("s/old2.html")[1]
 
         found = get("search.html?q=QUOKKA")[1]
         assert 'href="s/s1.html"' in found and "1 result for" in found and "2026-09-30" in found
@@ -516,3 +525,33 @@ def test_history_prompts_show_sessions_whose_transcript_is_deleted(tmp_path):
     assert "transcript deleted" in page and "fix it" in page and "claude -r" not in page
     assert "transcript deleted" in table and "claude -r gone" not in table
     assert secret not in page + table
+
+
+def test_prompt_only_sessions_do_not_change_the_usage_totals(tmp_path):
+    """A prompt-only session has no tools, cost or lines. The Usage header counts it apart, so the count of
+    sessions with a transcript and every tool total stay the same, and the project row says how many it holds."""
+    proj = tmp_path / "projects" / "p"
+    proj.mkdir(parents=True)
+    (proj / "kept.jsonl").write_text("\n".join([
+        _line(type="user", cwd="/w", timestamp="2026-09-30T08:00:00Z", message={"content": "go"}),
+        _line(type="assistant", cwd="/w", message={"content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {}}]}),
+        _line(type="cost-state", totalCostUSD=2.0)]))
+    (tmp_path / "plans").mkdir()
+    history = tmp_path / "history.jsonl"
+    args = argparse.Namespace(plans_dir=tmp_path / "plans", sessions_dir=tmp_path / "projects", live_dir=tmp_path / "no",
+                              claude_dir=tmp_path / "no", archive_state=tmp_path / "no", archive_repo=tmp_path / "no",
+                              history=history, no_git=True, serve=False)
+
+    def usage_page():
+        page = build_site(args).pages["usage.html"]()
+        return (re.search(r"Usage <span[^>]*>([^<]*)</span>", page).group(1),
+                re.findall(r'<span class="chip[^"]*">([^<]*)</span>', page), page)
+
+    head, chips, page = usage_page()
+    assert head == "1 sessions" and "1 tool calls" in chips and "prompts only)" not in page
+
+    history.write_text(_line(display="/clear", timestamp=1_774_000_000_000, project="/w", sessionId="gone"))
+    head2, chips2, page2 = usage_page()
+    assert head2 == "1 sessions + 1 with prompts only"
+    assert chips2 == chips
+    assert "(1 prompts only)" in page2
