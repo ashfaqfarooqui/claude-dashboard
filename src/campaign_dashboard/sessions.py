@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timezone
 from pathlib import Path
 
+from .parse import ID_RE
+
 WRITE_RE = re.compile(r'"name":"(?:Write|Edit)","input":\{"file_path":"([^"]*/\.claude/plans/[^"]+)"')
 CWD_RE = re.compile(r'"cwd":"((?:[^"\\]|\\.)*)"')
 COMMAND_RE = re.compile(r"<command-name>/?([^<\s]+)</command-name>")
@@ -53,6 +55,7 @@ class SubAgent:
     type: str | None = None
     description: str | None = None
     tools: ToolStats = field(default_factory=ToolStats)
+    tokens: int = 0  # input + cache creation + cache read + output, summed over every line
 
 
 @dataclass
@@ -213,8 +216,28 @@ def parse_session(log: Path) -> Session:
     return s
 
 
+def _tokens(d: dict) -> int:
+    usage = (d.get("message") or {}).get("usage")
+    if not isinstance(usage, dict):
+        return 0
+    keys = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")
+    return sum(v for k in keys if isinstance(v := usage.get(k), int))
+
+
+def issue_tokens(sessions: list[Session], prefix: str | None) -> dict[str, int]:
+    """Tokens of the subagents whose description holds exactly one issue ID of `prefix`, by issue ID.
+    A description with no such ID, or with more than one, is not linked."""
+    out: Counter[str] = Counter()
+    for s in sessions:
+        for a in s.agents:
+            ids = {m.group(0) for m in ID_RE.finditer(a.description or "") if m.group(1) == prefix}
+            if len(ids) == 1:
+                out[ids.pop()] += a.tokens
+    return dict(out)
+
+
 def parse_subagent(log: Path, plan_writes: Counter[tuple[str, str]]) -> SubAgent:
-    """Tool calls and plan writes only; lines with neither are skipped without parsing."""
+    """Tool calls, plan writes and token counts; lines with none of them are skipped without parsing."""
     a = SubAgent(id=log.stem.removeprefix("agent-"))
     try:
         meta = json.loads(log.with_suffix(".meta.json").read_text(encoding="utf-8"))
@@ -226,10 +249,12 @@ def parse_subagent(log: Path, plan_writes: Counter[tuple[str, str]]) -> SubAgent
         for line in fh:
             for w in _plan_writes(line):
                 plan_writes[w] += 1
-            if '"tool_use"' not in line and '"is_error":true' not in line:
+            if '"tool_use"' not in line and '"is_error":true' not in line and '"usage"' not in line:
                 continue
             try:
-                _tool_events(json.loads(line), a.tools, names)
+                d = json.loads(line)
+                _tool_events(d, a.tools, names)
+                a.tokens += _tokens(d)
             except (json.JSONDecodeError, AttributeError):
                 continue
     return a

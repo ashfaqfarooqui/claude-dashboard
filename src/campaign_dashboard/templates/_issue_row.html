@@ -4,5 +4,6 @@
   <td>{% if i.title %}<div class="title">{{ md(i.title, c.path, c.repo, 1) }}</div>{% endif %}
       {% if i.outcome %}<div class="outcome md">{{ md(i.outcome, c.path, c.repo, 1) }}</div>{% endif %}</td>
   <td>{{ i.model or '' }}</td>
+  <td class="tokens">{% if i.id in issue_tokens %}{{ '{:,}'.format(issue_tokens[i.id]) }}{% endif %}</td>
   <td class="commits">{% for s in i.commits %}<code{% if c.git and s in c.git.missing_commits %} class="missing" title="not in repo"{% endif %}>{{ s[:7] }}</code> {% endfor %}</td>
 </tr>

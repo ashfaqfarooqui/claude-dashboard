@@ -92,6 +92,15 @@ the auto-mode classifier. Each campaign
 has a page (START HERE, waves with issue status and outcomes, decisions, findings, log, git state),
 and every file — campaign files and loose plans — is rendered as HTML.
 
+The campaign page shows the usage gate reading as a small label on each Log line. `campaign:run`
+writes the reading at the end of the line (`stop: five_hour: 80% ... · seven_day: 57% ...`).
+The page marks a "dispatched" line **over the gate** in two cases. The state is `stop`. Or the
+state is `caution` and an issue on the line has model `opus` in the Status table.
+
+Each issue row shows the tokens of its subagents: input, cache creation, cache read and output. A subagent
+belongs to an issue when its description holds exactly one ID of the campaign's prefix. With no ID
+or two IDs, the page does not link it. The page shows tokens, not dollars.
+
 A folder with no MASTER.md yet is shown at its stage instead of as an error: **brainstorm**
 (only `DESIGN.md`, from `campaign:brainstorm`: status, verdict, which clarity-checklist sections are
 filled in, disagreements, and its `D<n>` decisions) or **audit** (`FINDINGS.md` without a plan).

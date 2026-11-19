@@ -49,6 +49,10 @@ class Decision:
 class LogEntry:
     date: date
     text: str
+    gate: str | None = None  # usage gate state at the end of the line: go | caution | stop | unknown
+    five_hour: int | None = None  # percent; None when the line gives n/a or no value
+    seven_day: int | None = None
+    over_gate: bool = False  # a dispatch made at `stop`, or at `caution` for an opus issue
 
 
 # The clarity checklist of campaign:brainstorm: one DESIGN.md section each.

@@ -162,6 +162,12 @@ ul.log { list-style: none; padding: 0; }
 ul.log li { padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; gap: 12px; }
 ul.log time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
 ul.log .md p { margin: 0; }
+ul.log .chip.gate { flex: none; align-self: flex-start; white-space: nowrap; }
+ul.log .chip.gate.stop { background: var(--bad-bg); color: var(--bad-text); }
+ul.log .chip.gate.caution { background: var(--warn-bg); color: var(--warn-text); }
+ul.log li.over-gate { border-left: 3px solid var(--bad-text); padding-left: 8px; }
+ul.log li > .chip.bad { flex: none; align-self: flex-start; white-space: nowrap; }
+table.issues td.tokens { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 ul.files { columns: 2 280px; }
 
 /* doc page */

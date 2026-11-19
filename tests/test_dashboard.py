@@ -25,7 +25,7 @@ from campaign_dashboard.parse import parse_campaign
 from campaign_dashboard.projects import attribute_plans, group, load_loose_plans
 from campaign_dashboard.render import Renderer
 from campaign_dashboard.server import Site, serve
-from campaign_dashboard.sessions import load_sessions, usage
+from campaign_dashboard.sessions import issue_tokens, load_sessions, usage
 from campaign_dashboard.skills import load_skills
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -214,6 +214,66 @@ def test_loose_plans_are_grouped_by_the_session_that_wrote_them(tmp_path):
     assert sorted(p.name for p in sdb.plans) == ["edited-in-subdir.md", "written.md"]  # subdir rolls up
     assert [p.name for p in by_label["b/main"].plans] == ["b-main.md"]
     assert [p.name for p in unassigned.plans] == ["only-mentioned.md"]
+
+
+GATE_LOG = """\
+## Status
+
+| ID | Status | Model | Commit | Outcome |
+|---|---|---|---|---|
+| XX-01 | ☑ | opus | | |
+| XX-02 | ☑ | sonnet | | |
+
+## Log
+
+- 2026-11-19 — XX-01 dispatched (opus). stop: five_hour: 80% (resets Thu 15:00) · seven_day: 57% (resets Mon 18:00) · snapshot 0 min old
+- 2026-11-18 — XX-02 dispatched (sonnet). stop: five_hour: 81% · seven_day: 12%
+- 2026-11-17 — XX-01 dispatched (opus). caution: five_hour: 60% (resets Thu 15:00) · seven_day: 55% (resets Mon 18:00)
+- 2026-11-16 — XX-02 dispatched (sonnet). caution: five_hour: 61% (resets Thu 15:00) · seven_day: 8% (resets Mon 18:00)
+- 2026-11-15 — XX-01 dispatched (opus). go: five_hour: 10% · seven_day: 9%
+- 2026-11-14 — XX-01 dispatched (opus). unknown: five_hour: n/a · seven_day: 46%
+- 2026-11-13 — XX-01 done, verified. stop: five_hour: 83% · seven_day: 58%
+- 2026-11-12 — XX-01 dispatched (opus). The user approved it.
+"""
+
+
+def test_log_lines_give_the_gate_reading_and_flag_dispatches_over_the_gate(tmp_path):
+    """Each row of GATE_LOG is one case; the expected values were read off the lines by hand."""
+    (tmp_path / "MASTER.md").write_text(GATE_LOG)
+
+    got = [(e.date.day, e.gate, e.five_hour, e.seven_day, e.over_gate) for e in parse_campaign(tmp_path).log]
+
+    assert got == [
+        (19, "stop", 80, 57, True),  # dispatched at stop
+        (18, "stop", 81, 12, True),  # a reading without reset times; any model
+        (17, "caution", 60, 55, True),  # caution and an opus issue
+        (16, "caution", 61, 8, False),  # caution but a sonnet issue
+        (15, "go", 10, 9, False),
+        (14, "unknown", None, 46, False),  # n/a is no number
+        (13, "stop", 83, 58, False),  # a reading at stop, but the line is not a dispatch
+        (12, None, None, None, False),  # no reading
+    ]
+
+
+def test_subagent_tokens_are_linked_to_an_issue_only_by_one_id_of_the_prefix(tmp_path):
+    """The expected sums were taken with the jq command of DSH-03 over the same lines."""
+    sub = tmp_path / "p" / "s1" / "subagents"
+    sub.mkdir(parents=True)
+    (tmp_path / "p" / "s1.jsonl").write_text(_line(type="user", message={"content": "go"}))
+    usage_line = _line(type="assistant", message={"usage": {
+        "input_tokens": 1, "cache_creation_input_tokens": 20, "cache_read_input_tokens": 300, "output_tokens": 4000}})
+    for name, desc, lines in [
+        ("a", "XX-01 do the thing", [usage_line, usage_line]),
+        ("b", "XX-01 again", [usage_line]),
+        ("c", "XX-01 and XX-02 together", [usage_line]),  # two IDs: no guess
+        ("d", "look around", [usage_line]),  # no ID
+        ("e", "YY-01 other campaign", [usage_line]),  # another prefix
+        ("f", "XX-02 no usage", [_line(type="user", message={"content": "hi"})]),
+    ]:
+        (sub / f"agent-{name}.jsonl").write_text("\n".join(lines))
+        (sub / f"agent-{name}.meta.json").write_text(json.dumps({"agentType": "x", "description": desc}))
+
+    assert issue_tokens(load_sessions(tmp_path), "XX") == {"XX-01": 3 * 4321, "XX-02": 0}  # f is linked, with no usage
 
 
 def _line(**d) -> str:

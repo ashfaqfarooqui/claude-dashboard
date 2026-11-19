@@ -13,6 +13,10 @@ ISSUE_FILE_RE = re.compile(r"^([A-Z]{2,4})-\d{2,3}(?:-\d{2,3})*-.+\.md$")
 DATE_RE = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
 # `- 2026-09-30 — …` (current format) or `**2026-09-22** — …` / `**2026-09-18 — X**` (older campaigns)
 LOG_LINE_RE = re.compile(r"^(?:- \*{0,2}|\*\*)(20\d\d-\d\d-\d\d)\*{0,2}\s*[—–-]+\s*(.*)$")
+# The usage gate reading that campaign:run ends a Log line with:
+# `stop: five_hour: 80% (resets Thu 15:00) · seven_day: 57% (resets Mon 18:00) · snapshot 0 min old`
+# Older lines drop the colons, the reset times or the seven_day part.
+GATE_RE = re.compile(r"\b(go|caution|stop|unknown): five_hour:? (n/a|\d+)%?[^·\n]*(?:· seven_day:? (n/a|\d+)%?)?")
 LABEL_RE = re.compile(r"^\*\*([^*]+?):\*\*", re.M)
 LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
 MODELS = ("haiku", "sonnet", "opus", "fable")
@@ -63,6 +67,9 @@ def parse_campaign(folder: Path) -> Campaign:
     for issue in c.issues.values():
         if issue.doc not in c.files:  # MASTER can name an issue file that was never written or was renamed
             issue.doc = None
+
+    for e in c.log:
+        e.over_gate = _over_gate(e, c.issues)
 
     if "FINDINGS.md" in c.files:
         c.findings = parse_findings((folder / "FINDINGS.md").read_text(encoding="utf-8"))
@@ -203,9 +210,25 @@ def parse_log(text: str) -> list[LogEntry]:
     out = []
     for line in text.splitlines():
         if m := LOG_LINE_RE.match(line.strip()):
-            out.append(LogEntry(date=date.fromisoformat(m.group(1)), text=m.group(2).strip()))
+            entry = LogEntry(date=date.fromisoformat(m.group(1)), text=m.group(2).strip())
+            if g := list(GATE_RE.finditer(entry.text)):  # the reading is at the end; take the last one
+                state, five, seven = g[-1].groups()
+                entry.gate = state
+                entry.five_hour = int(five) if five and five.isdigit() else None
+                entry.seven_day = int(seven) if seven and seven.isdigit() else None
+            out.append(entry)
     out.sort(key=lambda e: e.date, reverse=True)  # stable: same-day lines keep file order
     return out
+
+
+def _over_gate(e: LogEntry, issues: dict[str, Issue]) -> bool:
+    """A dispatch line is over the gate at `stop`, or at `caution` when an issue it names is opus."""
+    if not re.search(r"\bdispatched\b", e.text, re.IGNORECASE):
+        return False
+    if e.gate == "stop":
+        return True
+    named = {m.group(0) for m in ID_RE.finditer(e.text)}
+    return e.gate == "caution" and any(issues[i].model == "opus" for i in named if i in issues)
 
 
 def _merge_issue_file(c: Campaign, fname: str, text: str) -> None:

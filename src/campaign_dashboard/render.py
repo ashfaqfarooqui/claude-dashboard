@@ -22,7 +22,7 @@ from .archive import Archive
 from .model import CLOSED, GLYPHS, Campaign
 from .parse import parse_issue_header
 from .projects import LoosePlan, Project
-from .sessions import NEVER, Session, usage
+from .sessions import NEVER, Session, issue_tokens, usage
 from .skills import SkillDoc
 
 MAX_RENDER_BYTES = 2_000_000
@@ -225,8 +225,7 @@ class Renderer:
                 active=p.key, root="../", depth=1, heading=p.label, project=p, campaigns=p.campaigns,
                 plans=p.plans, sessions=p.sessions))
             for c in p.campaigns:
-                self.page(f"{c.slug}/index.html", lambda p=p, c=c: tpl("campaign.html").render(
-                    c=c, active=p.key, root="../", sessions=[s for s in sessions if s.touched(c.slug)]))
+                self.page(f"{c.slug}/index.html", lambda p=p, c=c: self._campaign_page(c, p.key, sessions))
                 for fname in c.files:
                     self.page(f"{c.slug}/{page_for(fname)}",
                               lambda p=p, c=c, f=fname: self._doc_page(c.path / f, p, c=c))
@@ -303,6 +302,13 @@ class Renderer:
         return tpl.render(
             active="skills", root="../" * depth, sk=sk, file=rel, body=body, raw=raw,
             file_uri=f.resolve().as_uri(), used=usage_of[sk.name], by_key=by_key, dupe=False)
+
+    def _campaign_page(self, c: Campaign, active: str, sessions: list[Session]) -> str:
+        """`sessions` is every session. A subagent that works in another repo never writes to the plans
+        folder, so its session does not "touch" the campaign; its tokens are linked by issue ID alone."""
+        tokens = {i: n for i, n in issue_tokens(sessions, c.prefix).items() if i in c.issues}
+        return self.env.get_template("campaign.html").render(
+            c=c, active=active, root="../", sessions=[s for s in sessions if s.touched(c.slug)], issue_tokens=tokens)
 
     def _doc_page(self, path: Path, project: Project, c: Campaign | None = None,
                   plan: LoosePlan | None = None, sessions: list[Session] = ()) -> str:
