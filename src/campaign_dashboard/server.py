@@ -1,6 +1,7 @@
 """`campaign-dashboard --serve`: the same site, rendered on request from the current files.
 
-A poller thread stats the inputs every POLL seconds. When a size or mtime changed it reloads the data
+A poller thread stats the inputs every POLL seconds. When a size or mtime changed, or RELOAD_EVERY seconds
+passed since the last load, it reloads the data
 (session logs that did not change are not parsed again) and tells open pages over /events, so they
 fetch themselves again and swap in what changed. Pages are rendered only when someone asks for them.
 Binds to 127.0.0.1 only: the pages show your prompts.
@@ -17,6 +18,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from .render import ASSETS, STATIC, Renderer, static_file
 
 POLL = 2.0  # seconds between checks for changed files
+RELOAD_EVERY = 3600.0  # seconds; a transcript that becomes idle changes no file, so reload on a timer too
 PING = 15.0  # seconds between keep-alive comments on /events
 TYPES = {".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg",
          ".jpeg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml", ".webp": "image/webp"}
@@ -25,14 +27,16 @@ TYPES = {".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".jp
 class Site:
     """The current Renderer, rebuilt by `poll()` when an input file changes."""
 
-    def __init__(self, build, roots: list[tuple[Path, str]]):
+    def __init__(self, build, roots: list[tuple[Path, str]], clock=time.monotonic):
         self._build = build  # (session_cache) -> Renderer
         self._roots = roots  # (folder, glob pattern) pairs whose files are watched
+        self._clock = clock  # () -> seconds; times the RELOAD_EVERY reload
         self._sessions: dict = {}
         self.version = 0
         self.changed = threading.Condition()
         self._fingerprint = self._stat()
         self.renderer: Renderer = build(self._sessions)
+        self._loaded = clock()
 
     def _stat(self) -> str:
         h = hashlib.blake2b(digest_size=16)
@@ -47,9 +51,11 @@ class Site:
 
     def poll(self) -> bool:
         fp = self._stat()
-        if fp == self._fingerprint:
+        now = self._clock()
+        if fp == self._fingerprint and now - self._loaded < RELOAD_EVERY:
             return False
         self._fingerprint = fp
+        self._loaded = now
         self.renderer = self._build(self._sessions)
         with self.changed:
             self.version += 1

@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+from campaign_dashboard import server
 from campaign_dashboard.archive import load_archive
 from campaign_dashboard.cli import build_site, main, watched
 from campaign_dashboard.parse import parse_campaign
@@ -473,6 +474,40 @@ def test_archive_lists_the_idle_transcripts_the_job_will_archive(tmp_path):
 
     assert [p.rel for p in a.pending] == ["projects/p/changed.jsonl", "projects/p/idle.jsonl"]
     assert (a.set_up, a.manifest_files, a.last_push is not None) == (True, 2, True)
+
+
+def test_live_server_lists_a_transcript_that_became_idle_without_a_file_change(tmp_path):
+    """Time passing changes no watched file, so the hourly reload is what puts a transcript that became
+    idle on the Archive page. The transcript is outside the watched folders to model a change the
+    poller cannot see; the clock is a fake that the test moves."""
+    claude, state, plans = tmp_path / "claude", tmp_path / "state", tmp_path / "plans"
+    plans.mkdir()
+    state.mkdir()
+    (state / "last-push").write_text(str(int(time.time())))
+    transcript = _aged(claude / "projects" / "p" / "s1.jsonl", 1)
+    args = argparse.Namespace(plans_dir=plans, sessions_dir=tmp_path / "no", live_dir=tmp_path / "no",
+                              claude_dir=claude, archive_state=state, archive_repo=tmp_path / "no",
+                              history=tmp_path / "no", no_git=True, serve=True)
+    now = [0.0]
+    site = Site(lambda cache: build_site(args, cache), watched(args), clock=lambda: now[0])
+    httpd = serve(site, plans, 0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    page = f"http://127.0.0.1:{httpd.server_address[1]}/archive.html"
+
+    def listed():
+        with urllib.request.urlopen(page) as r:
+            return "projects/p/s1.jsonl" in r.read().decode()
+
+    try:
+        assert not listed()
+        t = time.time() - 3 * 86400
+        os.utime(transcript, (t, t))  # now 3 days idle
+        now[0] = server.RELOAD_EVERY - 1
+        assert site.poll() is False and not listed()
+        now[0] = server.RELOAD_EVERY
+        assert site.poll() is True and listed()
+    finally:
+        httpd.shutdown()
 
 
 @pytest.mark.parametrize("push_days_ago, shown", [(5, "archive 5d old"), (None, "archive not set up")])
