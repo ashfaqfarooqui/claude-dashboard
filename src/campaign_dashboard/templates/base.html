@@ -22,6 +22,12 @@
   <a href="{{ root }}usage.html"{% if active == 'usage' %} aria-current="page"{% endif %}>Usage</a>
   <a href="{{ root }}archive.html"{% if active == 'archive' %} aria-current="page"{% endif %}>Archive</a>
 </nav>
+{% if live %}
+<form class="search" action="{{ root }}search.html" role="search">
+  <input type="search" name="q" value="{{ q|default('') }}" placeholder="Search prompts and replies" aria-label="Search the text of all sessions">
+  <button>Search</button>
+</form>
+{% endif %}
 <main>
 {% block main %}{% endblock %}
 </main>

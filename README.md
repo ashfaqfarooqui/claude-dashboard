@@ -49,6 +49,15 @@ cp contrib/campaign-dashboard.service ~/.config/systemd/user/
 systemctl --user enable --now campaign-dashboard
 ```
 
+**Search.** In live mode, each page has a search box. It finds a word in the prompts you typed and in
+the text of the replies. It reads every session. A session with no log has only its prompts. The match
+is a case-insensitive substring. The page shows the 50 newest messages, each with a snippet and a link to
+its session.
+
+On `search.html` you can filter by project and by prompt or reply. Tool calls and tool
+results are not searched. The text stays in memory, so a query takes some milliseconds. The static
+build has no search box.
+
 **Diagrams and images.** A ```` ```mermaid ```` block in any plan file is drawn as a diagram (Mermaid
 12.1.0, vendored in `static/`, loaded only on pages that have one). Images linked from a plan file
 are served from the campaign's `assets/` folder and copied there by the static build.

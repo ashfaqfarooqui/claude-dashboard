@@ -249,3 +249,13 @@ pre.mermaid:not([data-processed]) { color: var(--muted); text-align: left; }
 .banner { padding: 6px 10px; border-radius: 6px; background: var(--code-bg); color: var(--text-2); }
 .banner.warn { background: var(--warn-bg); color: var(--warn-text); }
 .banner a { color: inherit; }
+
+.search { display: flex; flex-wrap: wrap; gap: 6px; max-width: 1200px; margin: 10px auto 0; padding: 0 16px; }
+.search input, .search select, .search button {
+  font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 8px;
+}
+.search input[type=search] { flex: 1 1 18em; min-width: 0; }
+.hit { margin: 0 0 14px; }
+.hit .where { font-size: 0.85em; color: var(--text-2); }
+.hit .snip { margin: 2px 0 0; overflow-wrap: anywhere; color: var(--text-2); }

@@ -142,15 +142,26 @@ def test_folders_before_planning_show_their_stage_not_an_error(tmp_path, monkeyp
 
 def test_live_server_shows_file_changes_and_serves_only_campaign_assets(tmp_path):
     """Served pages are rendered from the files as they are now: after an edit, one poll is enough for the
-    next request to show it. Plan images are served from a campaign's assets/ folder and nothing else."""
+    next request to show it. Plan images are served from a campaign's assets/ folder and nothing else.
+    Search runs only in live mode: it finds a word in a prompt or a reply, links the session, escapes the
+    query and the text, and the static build has no search box."""
     plans = tmp_path / "plans"
     shutil.copytree(FIXTURES / "sdb-watch", plans / "sdb-watch")
     (plans / "sdb-watch" / "assets").mkdir()
     (plans / "sdb-watch" / "assets" / "flow.png").write_bytes(b"\x89PNG")
     (plans / "secret.png").write_bytes(b"\x89PNG")
-    args = argparse.Namespace(plans_dir=plans, sessions_dir=tmp_path / "no", live_dir=tmp_path / "no",
+    (tmp_path / "projects" / "p").mkdir(parents=True)
+    (tmp_path / "projects" / "p" / "s1.jsonl").write_text("\n".join([
+        _line(type="user", cwd="/tmp/x", timestamp="2026-09-30T08:00:00Z", message={"content": "tell me about zebrafish"}),
+        _line(type="assistant", cwd="/tmp/x", timestamp="2026-09-30T08:01:00Z",
+              message={"content": [{"type": "text", "text": "A quokka is not a <script>alert(1)</script> tag."}]}),
+        _line(type="user", cwd="/tmp/x", message={"content": [{"type": "tool_result", "content": "marmot"}]}),
+    ]))
+    args = argparse.Namespace(plans_dir=plans, sessions_dir=tmp_path / "projects", live_dir=tmp_path / "no",
                               claude_dir=tmp_path / "no", archive_state=tmp_path / "no", archive_repo=tmp_path / "no",
                               history=tmp_path / "no", no_git=True, serve=True)
+    static = build_site(argparse.Namespace(**{**vars(args), "serve": False}))
+    assert "search.html" not in static.pages and 'role="search"' not in static.pages["index.html"]()
     site = Site(lambda cache: build_site(args, cache), watched(args))
     httpd = serve(site, plans, 0)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -171,6 +182,15 @@ def test_live_server_shows_file_changes_and_serves_only_campaign_assets(tmp_path
         design.write_text(design.read_text().replace("Cache on disk or in memory?", "Cache format?"))
         assert site.poll() is True and site.version == 1
         assert "Cache format?" in get("sdb-watch/index.html")[1]
+
+        found = get("search.html?q=QUOKKA")[1]
+        assert 'href="s/s1.html"' in found and "1 result for" in found and "2026-09-30" in found
+        assert "1 result for" in get("search.html?q=zebrafish&role=user")[1]
+        assert "0 results for" in get("search.html?q=zebrafish&role=assistant")[1]
+        assert "0 results for" in get("search.html?q=marmot")[1]  # a tool result is not a prompt or a reply
+        xss = get("search.html?q=%3Cscript%3E")[1]
+        assert "for <code>&lt;script&gt;</code>" in xss and "&lt;script&gt;alert(1)" in xss
+        assert "<script>alert" not in xss and "<code><script>" not in xss
 
         assert get("sdb-watch/assets/flow.png")[0] == 200
         assert get("secret.png")[0] == 404

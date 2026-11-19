@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Search — Campaigns{% endblock %}
+{% block crumbs %}<span class="sep">/</span><span>Search</span>{% endblock %}
+{% block main %}
+<h1>Search</h1>
+<form class="search" action="search.html" role="search">
+  <input type="hidden" name="q" value="{{ q }}">
+  <select name="project" aria-label="Project" onchange="this.form.submit()">
+    <option value="">All projects</option>
+    {%- for p in all_projects %}
+    <option value="{{ p.key }}"{% if p.key == project %} selected{% endif %}>{{ p.label }}</option>
+    {%- endfor %}
+  </select>
+  <select name="role" aria-label="Who wrote it" onchange="this.form.submit()">
+    <option value="">Prompts and replies</option>
+    {%- for r in roles %}
+    <option value="{{ r }}"{% if r == role %} selected{% endif %}>{{ 'Prompts' if r == 'user' else 'Replies' }} only</option>
+    {%- endfor %}
+  </select>
+</form>
+{% if not q.strip() %}
+<p class="muted">Type a word above. The search is case-insensitive. It reads the prompts you typed and the text of the replies.</p>
+{% else %}
+<p class="muted small">{{ hits|length }} result{{ '' if hits|length == 1 else 's' }} for <code>{{ q }}</code>, newest first{% if hits|length == limit %} (the first {{ limit }}){% endif %}.</p>
+{% for h in hits %}
+<div class="hit">
+  <div class="where">{% if h.at %}{{ h.at.strftime('%Y-%m-%d %H:%M') }}{% else %}no time{% endif %} · {{ 'prompt' if h.role == 'user' else 'reply' }} ·
+    <a href="p/{{ h.project.key }}.html">{{ h.project.label }}</a> ·
+    <a href="s/{{ h.session.id }}.html">{{ h.session.label[:80] }}</a></div>
+  <p class="snip">{{ h.snippet }}</p>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

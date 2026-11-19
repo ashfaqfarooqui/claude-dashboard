@@ -4,8 +4,9 @@ A session's own log gives its directory, title, prompts, cost and timing. Its su
 (<id>/subagents/agent-<id>.jsonl, with a .meta.json naming the agent) add their tool calls and file
 writes. Writes to the plans folder are how loose plans and campaigns are tied back to the sessions
 that worked on them. ~/.claude/sessions/<pid>.json lists the processes that are running now.
-Claude Code deletes old logs, but ~/.claude/history.jsonl keeps one line for each prompt you typed. A
-session that has prompts there and no log is shown from those prompts alone ("prompt-only").
+The text of the assistant's replies is kept too, for search. Claude Code deletes old logs, but
+~/.claude/history.jsonl keeps one line for each prompt you typed. A session that has prompts there and
+no log is shown from those prompts alone ("prompt-only").
 """
 
 import json
@@ -65,6 +66,7 @@ class Session:
     cwd: str | None = None
     title: str | None = None
     prompt_log: list[Prompt] = field(default_factory=list)
+    replies: list[Prompt] = field(default_factory=list)  # the text blocks of the assistant's messages, for search
     commands: Counter[str] = field(default_factory=Counter)  # slash commands you typed
     started: datetime | None = None
     ended: datetime | None = None
@@ -119,6 +121,14 @@ def _prompt_text(msg: dict) -> str | None:
     if not isinstance(c, str) or not c.strip() or c.lstrip().startswith("<"):
         return None
     return c.strip()
+
+
+def _reply_text(msg: dict) -> str | None:
+    """The text blocks of an assistant message; thinking and tool calls are left out."""
+    c = msg.get("content")
+    if isinstance(c, list):
+        c = "\n".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
+    return c.strip() if isinstance(c, str) and c.strip() else None
 
 
 def _plan_writes(line: str, plans_marker: str = "/.claude/plans/") -> list[tuple[str, str]]:
@@ -197,6 +207,8 @@ def parse_session(log: Path) -> Session:
             elif t == "system" and d.get("subtype") == "local_command" and isinstance(d.get("content"), str):
                 s.commands.update(COMMAND_RE.findall(d["content"]))
             elif t == "assistant":
+                if text := _reply_text(d.get("message") or {}):
+                    s.replies.append(Prompt(ts, text[:PROMPT_KEEP]))
                 m = (d.get("message") or {}).get("model")
                 if m and not m.startswith("<"):
                     models[m] += 1

@@ -12,7 +12,7 @@ import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from .render import ASSETS, STATIC, Renderer, static_file
 
@@ -81,7 +81,12 @@ def handler(site: Site, plans_dir: Path):
             self.wfile.write(body)
 
         def do_GET(self) -> None:
-            rel = unquote(urlsplit(self.path).path).lstrip("/")
+            url = urlsplit(self.path)
+            rel = unquote(url.path).lstrip("/")
+            if rel == "search.html" and site.renderer.search_page:
+                form = {k: v[0] for k, v in parse_qs(url.query).items()}
+                return self._send(site.renderer.search_page(
+                    form.get("q", ""), form.get("project", ""), form.get("role", "")).encode(), "text/html; charset=utf-8")
             if rel == "events":
                 return self._events()
             if rel in STATIC:

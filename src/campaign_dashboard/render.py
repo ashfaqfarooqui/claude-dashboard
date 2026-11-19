@@ -22,6 +22,7 @@ from .archive import Archive
 from .model import CLOSED, GLYPHS, Campaign
 from .parse import parse_issue_header
 from .projects import LoosePlan, Project
+from .search import LIMIT, ROLES, search
 from .sessions import NEVER, Session, issue_tokens, usage
 from .skills import SkillDoc
 
@@ -62,6 +63,7 @@ class Renderer:
         self.plans_dir = plans_dir.resolve()
         self.today = today
         self.pages: dict[str, Callable[[], str]] = {}
+        self.search_page: Callable[[str, str, str], str] | None = None  # live mode only: (q, project, role) -> HTML
         self.summary = ""  # one line for the CLI: what was loaded
         self.site_pages: dict[Path, str] = {}  # source file -> its page, for files outside plans_dir
         self.md = MarkdownIt("commonmark", {"html": True, "highlight": _mermaid}).enable(["table", "strikethrough"])
@@ -241,6 +243,10 @@ class Renderer:
         self.page("usage.html", lambda: tpl("usage.html").render(
             active="usage", root="", sessions=sessions, u=u,
             by_project=[(p, usage(p.sessions)) for p in everyone if p.sessions]))
+        if self.env.globals["live"]:
+            self.search_page = lambda q, project, role: tpl("search.html").render(
+                active="search", root="", q=q, project=project, role=role, roles=ROLES, limit=LIMIT, hits=search(everyone, q, project, role),
+                all_projects=everyone)
         self.page("archive.html", lambda: tpl("archive.html").render(active="archive", root="", a=archive))
         self._register_skills(list(skills), u)
 
