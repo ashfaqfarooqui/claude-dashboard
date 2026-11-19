@@ -54,7 +54,7 @@ def load(plans_dir: Path, with_git: bool, git_cache: dict | None = None) -> list
 def build_site(args, session_cache: dict | None = None, git_cache: dict | None = None) -> Renderer:
     campaigns = load(args.plans_dir, with_git=not args.no_git, git_cache=git_cache)
     plans = load_loose_plans(args.plans_dir)
-    sessions = load_sessions(args.sessions_dir, args.live_dir, cache=session_cache)
+    sessions = load_sessions(args.sessions_dir, args.live_dir, cache=session_cache, history=args.history)
     attribute_plans(plans, sessions)
     projects, unassigned = group(campaigns, plans, sessions)
     skills = load_skills(args.claude_dir, [p.dir for p in projects])
@@ -73,7 +73,7 @@ def build_site(args, session_cache: dict | None = None, git_cache: dict | None =
 def watched(args) -> list[tuple[Path, str]]:
     """The inputs the live server stats each poll. Campaign repos' git files are added per campaign."""
     roots = [(args.plans_dir, "**/*"), (args.sessions_dir, "*/*.jsonl"), (args.sessions_dir, "*/*/subagents/*.jsonl"),
-             (args.live_dir, "*.json"), (args.claude_dir / "skills", "**/*"), (args.claude_dir / "commands", "*.md"),
+             (args.live_dir, "*.json"), (args.history, ""), (args.claude_dir / "skills", "**/*"), (args.claude_dir / "commands", "*.md"),
              (args.claude_dir / "plugins" / "installed_plugins.json", ""), (args.claude_dir / "settings.json", ""),
              (args.archive_state / "last-push", ""), (args.archive_state / "manifest", "")]
     roots += [(root / "skills", "**/*") for root in in_place_roots(args.claude_dir).values()]
@@ -103,6 +103,8 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path.home() / ".cache" / "campaign-dashboard")
     ap.add_argument("--sessions-dir", type=Path, default=Path.home() / ".claude" / "projects",
                     help="Claude Code session logs: listed per project, and used to place loose plans")
+    ap.add_argument("--history", type=Path, default=Path.home() / ".claude" / "history.jsonl",
+                    help="Claude Code's prompt history: shows sessions whose log was deleted, from their prompts")
     ap.add_argument("--live-dir", type=Path, default=Path.home() / ".claude" / "sessions",
                     help="Claude Code's running-process files, used to mark live sessions")
     ap.add_argument("--claude-dir", type=Path, default=Path.home() / ".claude",

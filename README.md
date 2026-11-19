@@ -65,6 +65,11 @@ plans each one wrote to, PR links). Sessions in a directory with no campaign or 
 **Unassigned**. Running sessions come from `~/.claude/sessions/<pid>.json` (`--live-dir`).
 Campaign and plan pages list the sessions that wrote to them.
 
+Claude Code deletes old transcripts, but `~/.claude/history.jsonl` (`--history`) keeps each prompt you
+typed. A session that has prompts there and no transcript shows in its project with a "transcript
+deleted" label. Its page lists the prompts only. It has no `claude -r` line, tools or subagents. The
+dashboard never reads `pastedContents`.
+
 The **Archive** tab shows the state of the daily `claude-archive` job. It reads two files in the job's
 state folder: `last-push` and `manifest` (`--archive-state`, default `~/.local/state/claude-archive`).
 It also reads the settings file and the size of the archive repo (`--archive-repo`, default

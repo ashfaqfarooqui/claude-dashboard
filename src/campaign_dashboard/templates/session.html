@@ -9,11 +9,12 @@
   {% if s.branch and s.branch != 'HEAD' %} · branch <code>{{ s.branch }}</code>{% endif %}
   {% if s.started %} · {{ s.started.strftime('%Y-%m-%d %H:%M') }} → {{ s.ended.strftime('%Y-%m-%d %H:%M') }} ({{ duration(s.started, s.ended) }}){% endif %}
 </p>
-<p class="meta"><code>cd {{ s.cwd or '.' }} && claude -r {{ s.id }}</code></p>
+{% if s.prompt_only %}<p class="meta"><span class="badge">transcript deleted</span> Only the prompts remain, from <code>{{ s.path }}</code>. Tools, subagents, cost and models are not known.</p>
+{% else %}<p class="meta"><code>cd {{ s.cwd or '.' }} && claude -r {{ s.id }}</code></p>{% endif %}
 <p class="totals">
-  <span class="chip">{% if s.cost is not none %}${{ '%.2f'|format(s.cost) }}{% else %}cost not recorded yet{% endif %}</span>
+  {% if not s.prompt_only %}<span class="chip">{% if s.cost is not none %}${{ '%.2f'|format(s.cost) }}{% else %}cost not recorded yet{% endif %}</span>{% endif %}
   <span class="chip">{{ s.prompts }} prompt{{ 's' if s.prompts != 1 }}</span>
-  <span class="chip">{{ '{:,}'.format(s.tools.calls.values()|sum) }} tool calls</span>
+  {% if not s.prompt_only %}<span class="chip">{{ '{:,}'.format(s.tools.calls.values()|sum) }} tool calls</span>{% endif %}
   {% if s.subagents %}<span class="chip">{{ s.subagents }} subagent{{ 's' if s.subagents != 1 }}</span>{% endif %}
   {% if s.lines_added or s.lines_removed %}<span class="chip">+{{ s.lines_added }} −{{ s.lines_removed }} lines</span>{% endif %}
   {% for name in s.models %}<span class="chip">{{ name|replace('claude-', '') }}</span>{% endfor %}
@@ -38,6 +39,7 @@
   {% if s.commands %}<p class="small">Slash commands: {% for c, n in s.commands.most_common() %}<span class="chip">/{{ c }}{% if n > 1 %} ×{{ n }}{% endif %}</span>{% endfor %}</p>{% endif %}
 </section>
 
+{% if not s.prompt_only %}
 <section>
   <h2>Tools</h2>
   {% if tool_rows %}
@@ -69,5 +71,6 @@
   <ul class="files">{% for f, n in s.tools.files.most_common() %}<li><a href="{{ file_link(f) }}"><code title="{{ f }}">{{ short_path(f, s.cwd) }}</code></a>{% if n > 1 %} <span class="muted small">×{{ n }}</span>{% endif %}</li>{% endfor %}</ul>
   {% else %}<p class="muted">No Write or Edit calls.</p>{% endif %}
 </section>
-<p class="muted small">Log: <code>{{ s.path }}</code></p>
+{% endif %}
+{% if not s.prompt_only %}<p class="muted small">Log: <code>{{ s.path }}</code></p>{% endif %}
 {% endblock %}

@@ -67,7 +67,7 @@
     {% if s.live %}<span class="badge {{ 'wip' if s.live == 'busy' else 'done' }}" title="process {{ s.live_name or '' }} is running">● {{ s.live }}</span> {% endif %}
     <div class="clamp1" title="{{ s.first_prompt or '' }}"><a href="{{ root }}s/{{ s.id }}.html">{{ s.label }}</a></div>
     {% if s.title and s.first_prompt and s.first_prompt != s.title %}<div class="muted small clamp1">{{ s.first_prompt }}</div>{% endif %}
-    <div class="small"><code>claude -r {{ s.id }}</code>{% if s.continued_in %} <span class="muted">→ continued in <code>{{ s.continued_in[:8] }}</code></span>{% endif %}</div>
+    <div class="small">{% if s.prompt_only %}<span class="badge">transcript deleted</span>{% else %}<code>claude -r {{ s.id }}</code>{% endif %}{% if s.continued_in %} <span class="muted">→ continued in <code>{{ s.continued_in[:8] }}</code></span>{% endif %}</div>
   </td>
   {% if show_where %}<td class="small">{% set p = session_project[s.id] %}{% if p %}<a href="{{ root }}p/{{ p.key }}.html">{{ p.label }}</a>{% else %}<code>{{ s.cwd or '?' }}</code>{% endif %}</td>{% endif %}
   <td class="nowrap">{% if s.ended %}{{ ago(s.ended.date()) }}<div class="muted small">{{ s.ended.strftime('%Y-%m-%d %H:%M') }}{% if s.started %} · {{ duration(s.started, s.ended) }}{% endif %}</div>{% else %}—{% endif %}</td>

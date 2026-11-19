@@ -150,7 +150,7 @@ def test_live_server_shows_file_changes_and_serves_only_campaign_assets(tmp_path
     (plans / "secret.png").write_bytes(b"\x89PNG")
     args = argparse.Namespace(plans_dir=plans, sessions_dir=tmp_path / "no", live_dir=tmp_path / "no",
                               claude_dir=tmp_path / "no", archive_state=tmp_path / "no", archive_repo=tmp_path / "no",
-                              no_git=True, serve=True)
+                              history=tmp_path / "no", no_git=True, serve=True)
     site = Site(lambda cache: build_site(args, cache), watched(args))
     httpd = serve(site, plans, 0)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -390,10 +390,44 @@ def test_archive_state_shows_on_the_all_page(tmp_path, push_days_ago, shown):
         _aged(state / "last-push", push_days_ago, str(int(time.time() - push_days_ago * 86400)))
     args = argparse.Namespace(plans_dir=plans, sessions_dir=tmp_path / "no", live_dir=tmp_path / "no",
                               claude_dir=tmp_path / "no", archive_state=state, archive_repo=tmp_path / "no",
-                              no_git=True, serve=False)
+                              history=tmp_path / "no", no_git=True, serve=False)
 
     r = build_site(args)
 
     index = r.pages["index.html"]()
     assert shown in index.split('class="banner')[1].split("</p>")[0]
     assert shown in r.pages["archive.html"]()
+
+
+def test_history_prompts_show_sessions_whose_transcript_is_deleted(tmp_path):
+    """A session with prompts in history.jsonl and no log is one prompt-only session. A session that has
+    a log is not added twice. `pastedContents` is never shown."""
+    proj = tmp_path / "projects" / "p"
+    proj.mkdir(parents=True)
+    (proj / "kept.jsonl").write_text(_line(type="user", cwd="/w", timestamp="2026-09-30T08:00:00Z",
+                                           message={"content": "from the log"}))
+    history = tmp_path / "history.jsonl"
+    secret = "sk-pasted-secret"
+    history.write_text("\n".join(_line(display=d, pastedContents={"1": {"content": secret}}, timestamp=ms,
+                                       project="/w", sessionId=sid)
+                                 for d, ms, sid in [("/clear", 1_774_000_000_000, "gone"),
+                                                    ("fix it", 1_774_000_060_000, "gone"),
+                                                    ("from history", 1_774_000_120_000, "kept")]))
+
+    sessions = {s.id: s for s in load_sessions(tmp_path / "projects", history=history)}
+
+    assert sorted(sessions) == ["gone", "kept"]
+    gone = sessions["gone"]
+    assert (gone.prompt_only, gone.cwd, gone.prompts, dict(gone.commands)) == (True, "/w", 2, {"clear": 1})
+    assert (gone.ended - gone.started).total_seconds() == 60
+    assert (sessions["kept"].prompt_only, sessions["kept"].first_prompt) == (False, "from the log")
+
+    args = argparse.Namespace(plans_dir=tmp_path / "plans", sessions_dir=tmp_path / "projects", live_dir=tmp_path / "no",
+                              claude_dir=tmp_path / "no", archive_state=tmp_path / "no", archive_repo=tmp_path / "no",
+                              history=history, no_git=True, serve=False)
+    (tmp_path / "plans").mkdir()
+    r = build_site(args)
+    page, table = r.pages["s/gone.html"](), r.pages["p/unassigned.html"]()
+    assert "transcript deleted" in page and "fix it" in page and "claude -r" not in page
+    assert "transcript deleted" in table and "claude -r gone" not in table
+    assert secret not in page + table

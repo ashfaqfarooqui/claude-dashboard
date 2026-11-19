@@ -4,6 +4,8 @@ A session's own log gives its directory, title, prompts, cost and timing. Its su
 (<id>/subagents/agent-<id>.jsonl, with a .meta.json naming the agent) add their tool calls and file
 writes. Writes to the plans folder are how loose plans and campaigns are tied back to the sessions
 that worked on them. ~/.claude/sessions/<pid>.json lists the processes that are running now.
+Claude Code deletes old logs, but ~/.claude/history.jsonl keeps one line for each prompt you typed. A
+session that has prompts there and no log is shown from those prompts alone ("prompt-only").
 """
 
 import json
@@ -11,7 +13,7 @@ import os
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 WRITE_RE = re.compile(r'"name":"(?:Write|Edit)","input":\{"file_path":"([^"]*/\.claude/plans/[^"]+)"')
@@ -56,7 +58,7 @@ class SubAgent:
 @dataclass
 class Session:
     id: str
-    path: Path
+    path: Path  # the log; for a prompt-only session, the history file
     cwd: str | None = None
     title: str | None = None
     prompt_log: list[Prompt] = field(default_factory=list)
@@ -76,6 +78,7 @@ class Session:
     plan_writes: Counter[tuple[str, str]] = field(default_factory=Counter)
     live: str | None = None  # "busy" / "idle" while a process is running it
     live_name: str | None = None
+    prompt_only: bool = False  # the log is deleted; only the prompts in history.jsonl remain
 
     @property
     def prompts(self) -> int:
@@ -232,16 +235,46 @@ def parse_subagent(log: Path, plan_writes: Counter[tuple[str, str]]) -> SubAgent
     return a
 
 
+def load_history(history: Path, skip: set[str]) -> list[Session]:
+    """One prompt-only Session for each sessionId in `history` that is not in `skip`.
+
+    Only `display`, `timestamp`, `project` and `sessionId` are read. `pastedContents` can hold pasted
+    secrets and is never read."""
+    out: dict[str, Session] = {}
+    try:
+        fh = history.open(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    with fh:
+        for line in fh:
+            try:
+                d = json.loads(line)
+                sid, text, ms = d["sessionId"], d["display"], d["timestamp"]
+                at = datetime.fromtimestamp(ms / 1000, UTC).astimezone()
+            except (ValueError, KeyError, TypeError, OverflowError, OSError):
+                continue
+            if not isinstance(sid, str) or not isinstance(text, str) or sid in skip:
+                continue
+            s = out.setdefault(sid, Session(id=sid, path=history, prompt_only=True))
+            s.cwd = s.cwd or (d.get("project") if isinstance(d.get("project"), str) else None)
+            s.started = min(s.started or at, at)
+            s.ended = max(s.ended or at, at)
+            s.prompt_log.append(Prompt(at, text[:PROMPT_KEEP]))
+            if text.startswith("/") and (name := text[1:].split(None, 1)[:1]):
+                s.commands[name[0]] += 1
+    return list(out.values())
+
+
 def load_sessions(sessions_dir: Path, live_dir: Path | None = None,
-                  cache: dict[Path, tuple[tuple, Session]] | None = None) -> list[Session]:
+                  cache: dict[Path, tuple[tuple, Session]] | None = None,
+                  history: Path | None = None) -> list[Session]:
     """Every <project>/<id>.jsonl under `sessions_dir`, newest first; unreadable logs are skipped.
+    With `history`, sessions that have prompts there and no log are added as prompt-only sessions.
 
     With `cache` (kept by the caller between calls), a log whose files have the same size and mtime as
     last time is not parsed again."""
-    if not sessions_dir.is_dir():
-        return []
     out: dict[str, Session] = {}
-    for log in sessions_dir.glob("*/*.jsonl"):
+    for log in sessions_dir.glob("*/*.jsonl") if sessions_dir.is_dir() else ():
         sub = log.parent / log.stem / "subagents"
         slogs = sorted(sub.glob("*.jsonl")) if sub.is_dir() else []
         try:
@@ -265,6 +298,9 @@ def load_sessions(sessions_dir: Path, live_dir: Path | None = None,
         out[s.id] = s
         if cache is not None:
             cache[log] = (sig, s)
+    if history:
+        for s in load_history(history, set(out)):
+            out[s.id] = s
     for s in out.values():
         s.live = s.live_name = None
     if live_dir:
