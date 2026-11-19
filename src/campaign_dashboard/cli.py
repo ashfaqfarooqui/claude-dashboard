@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import unquote
 
+from .archive import default_state_dir, load_archive
 from .gitinfo import git_state
 from .model import Campaign
 from .parse import parse_campaign
@@ -58,7 +59,8 @@ def build_site(args, session_cache: dict | None = None, git_cache: dict | None =
     projects, unassigned = group(campaigns, plans, sessions)
     skills = load_skills(args.claude_dir, [p.dir for p in projects])
     r = Renderer(args.plans_dir, date.today(), live=args.serve)
-    r.register(projects, unassigned, skills)
+    archive = load_archive(args.claude_dir, args.archive_state, args.archive_repo)
+    r.register(projects, unassigned, skills, archive)
     r.summary = (f"{len(projects)} projects, {len(campaigns)} campaigns, {len(plans)} plans "
                  f"({len(unassigned.plans)} unassigned), {len(sessions)} sessions, "
                  f"{len(skills)} skills and commands")
@@ -72,7 +74,8 @@ def watched(args) -> list[tuple[Path, str]]:
     """The inputs the live server stats each poll. Campaign repos' git files are added per campaign."""
     roots = [(args.plans_dir, "**/*"), (args.sessions_dir, "*/*.jsonl"), (args.sessions_dir, "*/*/subagents/*.jsonl"),
              (args.live_dir, "*.json"), (args.claude_dir / "skills", "**/*"), (args.claude_dir / "commands", "*.md"),
-             (args.claude_dir / "plugins" / "installed_plugins.json", ""), (args.claude_dir / "settings.json", "")]
+             (args.claude_dir / "plugins" / "installed_plugins.json", ""), (args.claude_dir / "settings.json", ""),
+             (args.archive_state / "last-push", ""), (args.archive_state / "manifest", "")]
     roots += [(root / "skills", "**/*") for root in in_place_roots(args.claude_dir).values()]
     if not args.no_git:
         repos = {c.repo for c in load(args.plans_dir, with_git=False) if c.repo}
@@ -104,6 +107,10 @@ def main() -> None:
                     help="Claude Code's running-process files, used to mark live sessions")
     ap.add_argument("--claude-dir", type=Path, default=Path.home() / ".claude",
                     help="where skills, commands and plugins are installed")
+    ap.add_argument("--archive-state", type=Path, default=default_state_dir(),
+                    help="state folder of the claude-archive job (last-push and manifest)")
+    ap.add_argument("--archive-repo", type=Path, default=Path.home() / "claude-archive",
+                    help="the archive git repo, whose size the Archive tab shows")
     ap.add_argument("--no-git", action="store_true", help="skip the read-only git queries")
     ap.add_argument("--open", action="store_true", help="open the dashboard with xdg-open")
     ap.add_argument("--serve", action="store_true",

@@ -7,9 +7,11 @@ fixture's Status table ID column, not from the parser.
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from datetime import date
@@ -17,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from campaign_dashboard.archive import load_archive
 from campaign_dashboard.cli import build_site, main, watched
 from campaign_dashboard.parse import parse_campaign
 from campaign_dashboard.projects import attribute_plans, group, load_loose_plans
@@ -95,7 +98,8 @@ def test_malformed_campaign_does_not_stop_the_build(tmp_path, monkeypatch):
     out = tmp_path / "out"
     monkeypatch.setattr(sys, "argv", ["campaign-dashboard", "--plans-dir", str(plans), "--out", str(out),
                                       "--sessions-dir", str(tmp_path / "no-sessions"),
-                                      "--claude-dir", str(tmp_path / "no-claude"), "--no-git", "--check-links"])
+                                      "--claude-dir", str(tmp_path / "no-claude"), "--archive-state", str(tmp_path / "no-state"),
+                                      "--archive-repo", str(tmp_path / "no-repo"), "--no-git", "--check-links"])
 
     main()  # --check-links exits non-zero on a broken link; returning means exit 0
 
@@ -126,7 +130,8 @@ def test_folders_before_planning_show_their_stage_not_an_error(tmp_path, monkeyp
     out = tmp_path / "out"
     monkeypatch.setattr(sys, "argv", ["campaign-dashboard", "--plans-dir", str(plans), "--out", str(out),
                                       "--sessions-dir", str(tmp_path / "no-sessions"),
-                                      "--claude-dir", str(tmp_path / "no-claude"), "--no-git", "--check-links"])
+                                      "--claude-dir", str(tmp_path / "no-claude"), "--archive-state", str(tmp_path / "no-state"),
+                                      "--archive-repo", str(tmp_path / "no-repo"), "--no-git", "--check-links"])
     main()
 
     waiting = (out / "index.html").read_text().split('class="waiting"')[1].split("</section>")[0]
@@ -144,7 +149,8 @@ def test_live_server_shows_file_changes_and_serves_only_campaign_assets(tmp_path
     (plans / "sdb-watch" / "assets" / "flow.png").write_bytes(b"\x89PNG")
     (plans / "secret.png").write_bytes(b"\x89PNG")
     args = argparse.Namespace(plans_dir=plans, sessions_dir=tmp_path / "no", live_dir=tmp_path / "no",
-                              claude_dir=tmp_path / "no", no_git=True, serve=True)
+                              claude_dir=tmp_path / "no", archive_state=tmp_path / "no", archive_repo=tmp_path / "no",
+                              no_git=True, serve=True)
     site = Site(lambda cache: build_site(args, cache), watched(args))
     httpd = serve(site, plans, 0)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -343,3 +349,51 @@ def test_plugin_from_a_local_marketplace_is_read_from_its_source(tmp_path):
     docs = {d.name: d for d in load_skills(home)}
 
     assert docs["campaign:plan"].description == "current"
+
+
+def _aged(path: Path, days: float, text: str = "x" * 10) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    t = time.time() - days * 86400
+    os.utime(path, (t, t))
+    return path
+
+
+def test_archive_lists_the_idle_transcripts_the_job_will_archive(tmp_path):
+    """The job archives a transcript when the newest file of it and of its session folder is 2 days old or
+    more, and the manifest has no entry for it or an older one. Expected values come from that rule in
+    `claude-archive`, not from the loader."""
+    claude, state = tmp_path / "claude", tmp_path / "state"
+    proj = claude / "projects" / "p"
+    now = time.time()
+    for name, days in [("unchanged", 5), ("changed", 3), ("idle", 4)]:
+        _aged(proj / f"{name}.jsonl", days)
+    _aged(proj / "active.jsonl", 6)  # old log, but its session folder was written 1 hour ago
+    _aged(proj / "active" / "subagents" / "a.jsonl", 1 / 24)
+    state.mkdir()
+    (state / "last-push").write_text(str(int(now)))
+    manifest = [(int(now - 5 * 86400), 10, "unchanged"), (int(now - 10 * 86400), 10, "changed")]
+    (state / "manifest").write_text("".join(f"{m}\t{s}\tprojects/p/{n}.jsonl\n" for m, s, n in manifest))
+
+    a = load_archive(claude, state, tmp_path / "no-repo")
+
+    assert [p.rel for p in a.pending] == ["projects/p/changed.jsonl", "projects/p/idle.jsonl"]
+    assert (a.set_up, a.manifest_files, a.last_push is not None) == (True, 2, True)
+
+
+@pytest.mark.parametrize("push_days_ago, shown", [(5, "archive 5d old"), (None, "archive not set up")])
+def test_archive_state_shows_on_the_all_page(tmp_path, push_days_ago, shown):
+    plans = tmp_path / "plans"
+    plans.mkdir()
+    state = tmp_path / "state"
+    if push_days_ago:
+        _aged(state / "last-push", push_days_ago, str(int(time.time() - push_days_ago * 86400)))
+    args = argparse.Namespace(plans_dir=plans, sessions_dir=tmp_path / "no", live_dir=tmp_path / "no",
+                              claude_dir=tmp_path / "no", archive_state=state, archive_repo=tmp_path / "no",
+                              no_git=True, serve=False)
+
+    r = build_site(args)
+
+    index = r.pages["index.html"]()
+    assert shown in index.split('class="banner')[1].split("</p>")[0]
+    assert shown in r.pages["archive.html"]()

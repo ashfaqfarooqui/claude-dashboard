@@ -238,3 +238,8 @@ pre.mermaid:not([data-processed]) { color: var(--muted); text-align: left; }
 .md img { max-width: 100%; height: auto; }
 #live { color: var(--st-done); }
 #live.off { color: var(--muted); }
+
+/* archive banner */
+.banner { padding: 6px 10px; border-radius: 6px; background: var(--code-bg); color: var(--text-2); }
+.banner.warn { background: var(--warn-bg); color: var(--warn-text); }
+.banner a { color: inherit; }

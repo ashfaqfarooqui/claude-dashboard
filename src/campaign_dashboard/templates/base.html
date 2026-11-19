@@ -20,6 +20,7 @@
   <a href="{{ root }}p/unassigned.html" title="{{ unassigned.campaigns|length }} campaigns, {{ unassigned.plans|length }} plans, {{ unassigned.sessions|length }} sessions"{% if active == 'unassigned' %} aria-current="page"{% endif %}>Unassigned <span class="n">{{ unassigned.campaigns|length + unassigned.plans|length }}{% if unassigned.sessions %} · {{ unassigned.sessions|length }} sessions{% endif %}</span></a>
   <a class="aside" href="{{ root }}skills/index.html"{% if active == 'skills' %} aria-current="page"{% endif %}>Skills</a>
   <a href="{{ root }}usage.html"{% if active == 'usage' %} aria-current="page"{% endif %}>Usage</a>
+  <a href="{{ root }}archive.html"{% if active == 'archive' %} aria-current="page"{% endif %}>Archive</a>
 </nav>
 <main>
 {% block main %}{% endblock %}

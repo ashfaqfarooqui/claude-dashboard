@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Archive — Campaigns{% endblock %}
+{% block crumbs %}<span class="sep">/</span><span>Archive</span>{% endblock %}
+{% macro size(n) -%}
+{{ '%.1f GB'|format(n / 1e9) if n >= 1e9 else '%.1f MB'|format(n / 1e6) }}
+{%- endmacro %}
+{% block main %}
+<h1>Archive</h1>
+<p class="muted small">The daily <code>claude-archive</code> job copies transcripts, plans, memory and the prompt history
+  into an encrypted git repo. This page only reads its state. It never runs the job.</p>
+
+{% if not a.set_up %}
+<p class="muted">archive not set up: the state folder of the job does not exist.</p>
+{% endif %}
+{% if a.warnings %}
+<p class="banner warn">{{ a.warnings|join(', ') }}</p>
+{% endif %}
+
+<p class="totals">
+  <span class="chip">last push: {% if a.last_push %}{{ a.last_push.strftime('%Y-%m-%d %H:%M') }}{% else %}none{% endif %}</span>
+  <span class="chip">{{ a.manifest_files }} files in the manifest</span>
+  <span class="chip">cleanupPeriodDays: {{ a.retention_days if a.retention_days is not none else 'not set' }}</span>
+  <span class="chip">settings.json: {{ 'symlink' if a.settings_symlink else 'not a symlink' }}</span>
+  {% if a.repo_bytes is not none %}<span class="chip">archive repo: {{ size(a.repo_bytes) }}</span>{% endif %}
+  {% if a.year_bytes is not none %}<span class="chip" title="repo size divided by the days since the first entry of .git/logs/HEAD, times 365">at this rate: {{ size(a.year_bytes) }} each year</span>{% endif %}
+</p>
+
+{% if a.set_up %}
+<section>
+  <h2>Not archived yet <span class="muted">{{ a.pending|length }}</span></h2>
+  <p class="muted small">Transcripts that the next run archives: the newest file of the transcript and of its session folder is
+    2 days old or more, and the manifest has no entry for it or an older one.</p>
+  {% if a.pending %}
+  <table class="plans">
+    <thead><tr><th>Transcript</th><th>Newest file</th><th class="num">Size</th></tr></thead>
+    <tbody>
+    {% for p in a.pending|sort(attribute='mtime', reverse=true) %}
+      <tr><td><code>{{ p.rel }}</code></td><td>{{ p.mtime.strftime('%Y-%m-%d %H:%M') }} <span class="muted">· {{ ago(p.mtime.date()) }}</span></td><td class="num">{{ size(p.size) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Every idle transcript is archived.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

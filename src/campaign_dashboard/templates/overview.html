@@ -5,6 +5,11 @@
 {% block main %}
 {% if project and project.dir %}<p class="meta"><code>{{ project.dir }}</code></p>{% endif %}
 
+{% if not project and archive %}
+  {% set notes = (['archive not set up'] if not archive.set_up else []) + archive.warnings %}
+  {% if notes %}<p class="banner{% if archive.warnings %} warn{% endif %}"><a href="{{ root }}archive.html">{{ notes|join(', ') }}</a></p>{% endif %}
+{% endif %}
+
 {% set live = sessions|selectattr('live')|list %}
 {% if live %}
 <section>

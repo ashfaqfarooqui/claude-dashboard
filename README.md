@@ -65,6 +65,16 @@ plans each one wrote to, PR links). Sessions in a directory with no campaign or 
 **Unassigned**. Running sessions come from `~/.claude/sessions/<pid>.json` (`--live-dir`).
 Campaign and plan pages list the sessions that wrote to them.
 
+The **Archive** tab shows the state of the daily `claude-archive` job. It reads two files in the job's
+state folder: `last-push` and `manifest` (`--archive-state`, default `~/.local/state/claude-archive`).
+It also reads the settings file and the size of the archive repo (`--archive-repo`, default
+`~/claude-archive`). The tab lists the idle transcripts that the next run archives. It shows the manifest
+size, the repo size, and the repo size after one year at the rate since the first reflog entry.
+
+The **All** page shows a banner when one of three things is true: the last push is more than 3 days old,
+`cleanupPeriodDays` is not 3650, or `settings.json` is not a symlink. If the state folder does not exist, the tab
+says "archive not set up". The tab only reads. It never runs the job and never writes.
+
 Each session has its own page (`s/<id>.html`): every prompt you typed with its time, slash
 commands, tool calls with errors / rejections / denials, skills, subagents (type, description, their
 tool calls) and the files it wrote. The **Usage** tab tallies the same across all sessions: skills

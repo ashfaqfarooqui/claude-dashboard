@@ -2,7 +2,7 @@
 
 index.html (All tab) · p/<project>.html (one tab per project, p/unassigned.html) ·
 <slug>/index.html + <slug>/<file>.html (campaigns) · plans/<file>.html (loose plans) ·
-s/<session id>.html (sessions) · usage.html (tools, skills and subagents across sessions) ·
+s/<session id>.html (sessions) · usage.html (tools, skills and subagents across sessions) · archive.html (the claude-archive job) ·
 skills/index.html + skills/<skill>/index.html + skills/<skill>/<file>.html (skills and commands)
 """
 
@@ -18,6 +18,7 @@ from markdown_it import MarkdownIt
 from markdown_it.common.utils import escapeHtml
 from markupsafe import Markup
 
+from .archive import Archive
 from .model import CLOSED, GLYPHS, Campaign
 from .parse import parse_issue_header
 from .projects import LoosePlan, Project
@@ -198,7 +199,8 @@ class Renderer:
             if assets.is_dir():
                 shutil.copytree(assets, out / assets.relative_to(self.plans_dir), dirs_exist_ok=True)
 
-    def register(self, projects: list[Project], unassigned: Project, skills: list[SkillDoc] = ()) -> None:
+    def register(self, projects: list[Project], unassigned: Project, skills: list[SkillDoc] = (),
+                 archive: Archive | None = None) -> None:
         everyone = [*projects, unassigned]
         project_of = {c.slug: p for p in everyone for c in p.campaigns}
         plan_project = {pl.name: (p if p is not unassigned else None) for p in everyone for pl in p.plans}
@@ -206,7 +208,7 @@ class Renderer:
         self._campaigns = {c.slug for p in everyone for c in p.campaigns}
         self._plans = {pl.name: pl for p in everyone for pl in p.plans}
         self.env.globals.update(projects=projects, unassigned=unassigned, project_of=project_of,
-                                plan_project=plan_project, session_project=session_project)
+                                plan_project=plan_project, session_project=session_project, archive=archive)
         campaigns = sorted((c for p in everyone for c in p.campaigns),
                            key=lambda c: c.last_activity or date.min, reverse=True)
         plans = sorted((pl for p in everyone for pl in p.plans), key=lambda pl: pl.modified, reverse=True)
@@ -240,6 +242,7 @@ class Renderer:
         self.page("usage.html", lambda: tpl("usage.html").render(
             active="usage", root="", sessions=sessions, u=u,
             by_project=[(p, usage(p.sessions)) for p in everyone if p.sessions]))
+        self.page("archive.html", lambda: tpl("archive.html").render(active="archive", root="", a=archive))
         self._register_skills(list(skills), u)
 
     def _register_skills(self, skills: list[SkillDoc], u: dict) -> None:
