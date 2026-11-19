@@ -41,7 +41,7 @@ uv run pytest
 **Live mode.** `--serve` renders each page when it is requested. Every 2 s it checks the size and
 mtime of the plans, session logs, skills and each campaign repo's `.git/HEAD`, `index` and
 `logs/HEAD`. When one changed it reloads, parsing again only the session logs that changed, and
-open pages fetch themselves and swap in the parts that changed. It listens on 127.0.0.1 only. To run
+open pages fetch themselves and swap in the parts that changed. The server also reloads once an hour, even when no file changed, so that a transcript that becomes idle shows on the Archive tab. It listens on 127.0.0.1 only. To run
 it all the time:
 
 ```sh
