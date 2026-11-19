@@ -223,6 +223,7 @@ GATE_LOG = """\
 |---|---|---|---|---|
 | XX-01 | ☑ | opus | | |
 | XX-02 | ☑ | sonnet | | |
+| XX-03 | ☑ | sonnet | | |
 
 ## Log
 
@@ -234,6 +235,8 @@ GATE_LOG = """\
 - 2026-11-14 — XX-01 dispatched (opus). unknown: five_hour: n/a · seven_day: 46%
 - 2026-11-13 — XX-01 done, verified. stop: five_hour: 83% · seven_day: 58%
 - 2026-11-12 — XX-01 dispatched (opus). The user approved it.
+- 2026-11-11 — XX-01 held: usage gate caution, opus not dispatched. XX-03 dispatched (sonnet). caution: five_hour: 67% · seven_day: 8%
+- 2026-11-10 — Wave 2: XX-01 dispatched. caution: five_hour: 62% · seven_day: 8%
 """
 
 
@@ -252,6 +255,8 @@ def test_log_lines_give_the_gate_reading_and_flag_dispatches_over_the_gate(tmp_p
         (14, "unknown", None, 46, False),  # n/a is no number
         (13, "stop", 83, 58, False),  # a reading at stop, but the line is not a dispatch
         (12, None, None, None, False),  # no reading
+        (11, "caution", 67, 8, False),  # names an opus issue that was held; the dispatched one is sonnet
+        (10, "caution", 62, 8, True),  # "dispatched" directly after the opus ID
     ]
 
 

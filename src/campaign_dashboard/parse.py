@@ -17,6 +17,7 @@ LOG_LINE_RE = re.compile(r"^(?:- \*{0,2}|\*\*)(20\d\d-\d\d-\d\d)\*{0,2}\s*[鈥斺�
 # `stop: five_hour: 80% (resets Thu 15:00) 路 seven_day: 57% (resets Mon 18:00) 路 snapshot 0 min old`
 # Older lines drop the colons, the reset times or the seven_day part.
 GATE_RE = re.compile(r"\b(go|caution|stop|unknown): five_hour:? (n/a|\d+)%?[^路\n]*(?:路 seven_day:? (n/a|\d+)%?)?")
+DISPATCHED_RE = re.compile(r"\b([A-Z]{2,4}-\d{2,3})\b(?:\s*\([^)]*\))?\s+dispatched\b", re.IGNORECASE)
 LABEL_RE = re.compile(r"^\*\*([^*]+?):\*\*", re.M)
 LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
 MODELS = ("haiku", "sonnet", "opus", "fable")
@@ -222,13 +223,15 @@ def parse_log(text: str) -> list[LogEntry]:
 
 
 def _over_gate(e: LogEntry, issues: dict[str, Issue]) -> bool:
-    """A dispatch line is over the gate at `stop`, or at `caution` when an issue it names is opus."""
+    """A dispatch line is over the gate at `stop`, or at `caution` when an issue that the line says was
+    dispatched is opus. An ID counts as dispatched when "dispatched" follows it, with at most a
+    parenthesis between: "SWD-17 dispatched (sonnet)"."""
     if not re.search(r"\bdispatched\b", e.text, re.IGNORECASE):
         return False
     if e.gate == "stop":
         return True
-    named = {m.group(0) for m in ID_RE.finditer(e.text)}
-    return e.gate == "caution" and any(issues[i].model == "opus" for i in named if i in issues)
+    dispatched = {m.group(1) for m in DISPATCHED_RE.finditer(e.text)}
+    return e.gate == "caution" and any(issues[i].model == "opus" for i in dispatched if i in issues)
 
 
 def _merge_issue_file(c: Campaign, fname: str, text: str) -> None:
